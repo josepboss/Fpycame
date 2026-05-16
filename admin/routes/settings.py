@@ -18,8 +18,7 @@ async def show_settings(request: Request):
     api_cfg = configparser.ConfigParser()
     api_cfg.read(API_KEYS_CFG, encoding="utf-8")
 
-    return templates.TemplateResponse("settings.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "settings.html", {
         "golden_key": main_cfg["FunPay"].get("golden_key", ""),
         "hstore_key": api_cfg["hstore"].get("api_key", "") if "hstore" in api_cfg else "",
         "hstore_secret": api_cfg["hstore"].get("api_secret", "") if "hstore" in api_cfg else "",
