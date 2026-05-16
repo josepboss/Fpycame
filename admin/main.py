@@ -22,4 +22,4 @@ app.include_router(status.router, prefix="/status", tags=["status"], dependencie
 
 @app.get("/")
 async def root(request: Request, user: str = Depends(get_current_user)):
-    return templates.TemplateResponse("base.html", {"request": request, "user": user})
+    return templates.TemplateResponse(request, "base.html", {"user": user})
