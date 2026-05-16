@@ -8,14 +8,15 @@ import re
 import logging
 import threading
 import configparser
-import random
+import secrets
 from typing import TYPE_CHECKING, Dict, Any, Optional
+
+import requests
 
 if TYPE_CHECKING:
     from cardinal import Cardinal
     from FunPayAPI.updater.events import NewOrderEvent, NewMessageEvent
 
-from FunPayAPI.types import Message
 
 # Plugin Metadata
 NAME = "API Delivery"
@@ -54,7 +55,6 @@ def init_configs():
         with open(API_KEYS_CFG, "w", encoding="utf-8") as f:
             config.write(f)
 
-    # Ensure storage/products directory exists
     if not os.path.exists("storage/products"):
         os.makedirs("storage/products")
 
@@ -86,8 +86,8 @@ def hstore_request(method: str, path: str, query: str = "", body: Optional[Dict]
     api_key = keys["hstore"]["api_key"]
     api_secret = keys["hstore"]["api_secret"]
     timestamp = str(int(time.time()))
-    nonce = hashlib.md5(str(random.random()).encode()).hexdigest()
-    body_json = json.dumps(body) if body else ""
+    nonce = secrets.token_hex(16)
+    body_json = json.dumps(body, separators=(",", ":")) if body else ""
     body_hash = hashlib.sha256(body_json.encode()).hexdigest()
 
     canonical = f"{method.upper()}\n{path}\n{query}\n{timestamp}\n{nonce}\n{body_hash}"
@@ -104,6 +104,8 @@ def hstore_request(method: str, path: str, query: str = "", body: Optional[Dict]
         headers["Idempotency-Key"] = idempotency_key
 
     url = f"https://hstore.site{path}"
+    if query:
+        url += f"?{query}"
     try:
         if method.upper() == "POST":
             return requests.post(url, headers=headers, data=body_json, timeout=30)
@@ -140,14 +142,14 @@ def handle_hstore(crd: Cardinal, event: NewOrderEvent) -> bool:
 
     if resp and resp.status_code == 409:
         # Duplicate – recover by lookup
-        resp = hstore_request("GET", f"/api/v1/orders/lookup?external_order_id={ext_id}")
+        resp = hstore_request("GET", "/api/v1/orders/lookup",
+                              query=f"external_order_id={ext_id}")
 
     if resp and resp.status_code in (200, 201):
         try:
             data = resp.json()
             items = data.get("data", {}).get("delivery", {}).get("items", [])
             if items:
-                # Write to the stock file so Cardinal can send
                 ad_cfg = crd.AD_CFG
                 if lot_name in ad_cfg:
                     stock_file = ad_cfg[lot_name].get("productsFileName", "")
@@ -284,20 +286,23 @@ def new_order_handler(crd: Cardinal, event: NewOrderEvent):
         return
 
     buyer = event.order.buyer_username
-    with _lock:
-        _sessions[buyer] = {
-            "state": "asking",
-            "order": event.order,
-            "lot_name": lot_name,
-            "cardinal": crd,
-            "quantity": getattr(event.order, 'amount', 1),
-            "candidate": None,
-            "expires_at": time.time() + 600,
-        }
 
-    crd.send_message(event.order.chat_id,
-                     "Please send your username or profile link",
-                     event.order.buyer_username)
+    def _start():
+        with _lock:
+            _sessions[buyer] = {
+                "state": "asking",
+                "order": event.order,
+                "lot_name": lot_name,
+                "cardinal": crd,
+                "quantity": getattr(event.order, 'amount', 1),
+                "candidate": None,
+                "expires_at": time.time() + 600,
+            }
+        crd.send_message(event.order.chat_id,
+                         "Please send your username or profile link",
+                         event.order.buyer_username)
+
+    threading.Thread(target=_start, daemon=True).start()
 
 
 def new_message_handler(crd: Cardinal, event: NewMessageEvent):
@@ -306,7 +311,7 @@ def new_message_handler(crd: Cardinal, event: NewMessageEvent):
     if msg.author_id == crd.account.id:
         return  # ignore outgoing
 
-    buyer = msg.chat_name
+    buyer = msg.author
     if not buyer:
         return
 
@@ -388,5 +393,3 @@ BIND_TO_POST_INIT = [post_init_handler]
 BIND_TO_NEW_ORDER = [new_order_handler]
 BIND_TO_NEW_MESSAGE = [new_message_handler]
 BIND_TO_PRE_DELIVERY = [pre_delivery_handler]
-
-import requests  # import here after module-level to avoid circular issues
