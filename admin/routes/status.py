@@ -28,7 +28,9 @@ def get_pm2_status():
 async def show_status(request: Request):
     status, uptime = get_pm2_status()
     uptime_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(uptime / 1000)) if uptime else "N/A"
-    return templates.TemplateResponse("status.html", request, {"status": status, "uptime": uptime_str})
+    return templates.TemplateResponse("status.html", {
+        "request": request, "status": status, "uptime": uptime_str
+    })
 
 
 @router.post("/action/{cmd}")
