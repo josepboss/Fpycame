@@ -44,7 +44,7 @@ async def list_lots(request: Request):
             "id": api_cfg[section].get("product_id") or api_cfg[section].get("service_id", ""),
             "enabled": api_cfg[section].getboolean("enabled", fallback=False),
         })
-    return templates.TemplateResponse("lots.html", {"request": request, "lots": lots_list})
+    return templates.TemplateResponse("lots.html", request, {"lots": lots_list})
 
 
 @router.post("/save")
