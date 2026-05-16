@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Lot Mapping</h1>
+<div class="mb-8">
+    <h2 class="text-xl font-semibold mb-2">Add / Edit Lot</h2>
+    <form action="/lots/save" method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input type="text" name="lot_name" placeholder="Lot Name (Exact FunPay Title)" class="border p-2 rounded" required>
+        <select name="provider" class="border p-2 rounded">
+            <option value="hstore">HStore</option>
+            <option value="smmcost">SMMCost</option>
+        </select>
+        <input type="text" name="item_id" placeholder="Product / Service ID" class="border p-2 rounded" required>
+        <label class="flex items-center space-x-2">
+            <input type="checkbox" name="enabled" value="true" checked>
+            <span>Enabled</span>
+        </label>
+        <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save Lot</button>
+    </form>
+</div>
+<table class="min-w-full bg-white">
+    <thead>
+        <tr>
+            <th class="py-2 px-4 border-b text-left">Lot Name</th>
+            <th class="py-2 px-4 border-b text-left">Provider</th>
+            <th class="py-2 px-4 border-b text-left">ID</th>
+            <th class="py-2 px-4 border-b text-left">Enabled</th>
+            <th class="py-2 px-4 border-b text-left">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for lot in lots %}
+        <tr>
+            <td class="py-2 px-4 border-b">{{ lot.name }}</td>
+            <td class="py-2 px-4 border-b">{{ lot.provider }}</td>
+            <td class="py-2 px-4 border-b">{{ lot.id }}</td>
+            <td class="py-2 px-4 border-b">{{ "Yes" if lot.enabled else "No" }}</td>
+            <td class="py-2 px-4 border-b">
+                <a href="/lots/delete/{{ lot.name }}" class="text-red-600 hover:underline">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

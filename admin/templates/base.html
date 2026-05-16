@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FunPay Cardinal Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+    <nav class="bg-gray-800 p-4 text-white">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="text-xl font-bold">Cardinal Admin</div>
+            <div class="space-x-4">
+                <a href="/lots" class="hover:text-gray-300">Lots</a>
+                <a href="/settings" class="hover:text-gray-300">Settings</a>
+                <a href="/logs" class="hover:text-gray-300">Logs</a>
+                <a href="/status" class="hover:text-gray-300">Status</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mx-auto mt-8 p-4 bg-white shadow-lg rounded-lg">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

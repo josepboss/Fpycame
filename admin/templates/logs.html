@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Live Logs</h1>
+<div class="mb-4 flex space-x-2">
+    <button onclick="fetchLogs()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Refresh Now</button>
+    <button onclick="clearLogs()" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">Clear Logs</button>
+</div>
+<textarea id="logArea" class="w-full h-96 p-4 bg-black text-green-400 font-mono text-sm rounded" readonly></textarea>
+
+<script>
+    async function fetchLogs() {
+        const resp = await fetch('/logs/stream');
+        const text = await resp.text();
+        document.getElementById('logArea').value = text;
+    }
+    async function clearLogs() {
+        await fetch('/logs/clear', {method: 'POST'});
+        fetchLogs();
+    }
+    setInterval(fetchLogs, 3000);
+    fetchLogs();
+</script>
+{% endblock %}

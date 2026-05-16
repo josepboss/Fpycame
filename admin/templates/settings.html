@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Settings</h1>
+
+<div class="mb-8 p-4 border rounded">
+    <h2 class="text-xl font-semibold mb-2">FunPay Account</h2>
+    <form action="/settings/save_funpay" method="post">
+        <div class="mb-4">
+            <label class="block text-gray-700">Golden Key</label>
+            <input type="password" name="golden_key" value="{{ golden_key }}" class="border p-2 w-full rounded">
+        </div>
+        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save FunPay Key</button>
+    </form>
+</div>
+
+<div class="mb-8 p-4 border rounded">
+    <h2 class="text-xl font-semibold mb-2">Provider API Keys</h2>
+    <form action="/settings/save_api" method="post">
+        <div class="mb-4">
+            <label class="block text-gray-700">HStore API Key</label>
+            <input type="password" name="hstore_key" value="{{ hstore_key }}" class="border p-2 w-full rounded">
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700">HStore API Secret</label>
+            <input type="password" name="hstore_secret" value="{{ hstore_secret }}" class="border p-2 w-full rounded">
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700">SMMCost API Key</label>
+            <input type="password" name="smmcost_key" value="{{ smmcost_key }}" class="border p-2 w-full rounded">
+        </div>
+        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save API Keys</button>
+    </form>
+</div>
+
+<div class="p-4 border rounded">
+    <h2 class="text-xl font-semibold mb-2">Admin Credentials</h2>
+    <form action="/settings/save_admin" method="post">
+        <div class="mb-4">
+            <label class="block text-gray-700">Username</label>
+            <input type="text" name="username" placeholder="admin" class="border p-2 w-full rounded">
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700">New Password</label>
+            <input type="password" name="password" placeholder="New Password" class="border p-2 w-full rounded">
+        </div>
+        <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Update Admin Auth</button>
+    </form>
+</div>
+{% endblock %}
