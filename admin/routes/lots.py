@@ -15,7 +15,8 @@ AUTO_DELIVERY_CFG = "configs/auto_delivery.cfg"
 def get_cfgs():
     api_cfg = configparser.ConfigParser()
     api_cfg.read(API_DELIVERY_CFG, encoding="utf-8")
-    auto_cfg = configparser.ConfigParser()
+    auto_cfg = configparser.ConfigParser(delimiters=(":",), interpolation=None)
+    auto_cfg.optionxform = str
     auto_cfg.read(AUTO_DELIVERY_CFG, encoding="utf-8")
     return api_cfg, auto_cfg
 
@@ -31,6 +32,19 @@ def sanitize_filename(name: str) -> str:
     """Sanitize lot name to a valid filename."""
     sanitized = re.sub(r'[^\w\s-]', '', name).strip().replace(' ', '_')
     return f"{sanitized}.txt"
+
+
+def write_auto_delivery_cfg(auto_cfg):
+    """Write auto_delivery.cfg in the exact format Cardinal expects."""
+    with open(AUTO_DELIVERY_CFG, "w", encoding="utf-8") as f:
+        for section in auto_cfg.sections():
+            f.write(f"[{section}]\n")
+            for key, value in auto_cfg.items(section):
+                if key == "response":
+                    f.write(f"response : {value}\n")
+                else:
+                    f.write(f"{key} : {value}\n")
+            f.write("\n")
 
 
 @router.get("/")
@@ -55,7 +69,9 @@ async def save_lot(
         enabled: bool = Form(False)
 ):
     api_cfg, auto_cfg = get_cfgs()
+    lot_name = lot_name.strip()
 
+    # Save to api_delivery.cfg
     if lot_name not in api_cfg:
         api_cfg.add_section(lot_name)
 
@@ -68,13 +84,20 @@ async def save_lot(
         api_cfg[lot_name].pop("product_id", None)
     api_cfg[lot_name]["enabled"] = "1" if enabled else "0"
 
-    # Update auto_delivery.cfg
+    # Save to auto_delivery.cfg in Cardinal's exact format
     if lot_name not in auto_cfg:
-        auto_cfg.add_section(lot_name)
-    auto_cfg[lot_name]["response"] = "$product"
-    auto_cfg[lot_name]["productsFileName"] = sanitize_filename(lot_name)
+        auto_cfg[lot_name] = {}
 
-    save_cfgs(api_cfg, auto_cfg)
+    # Set the multiline response with tab-indented lines
+    response_text = "Спасибо за покупку, $username!\n\t\n\tВот твой товар:\n\t\n\t$product"
+    auto_cfg[lot_name]["response"] = response_text
+
+    # Write both configs
+    with open(API_DELIVERY_CFG, "w", encoding="utf-8") as f:
+        api_cfg.write(f)
+
+    write_auto_delivery_cfg(auto_cfg)
+
     return RedirectResponse(url="/lots", status_code=303)
 
 
@@ -85,5 +108,11 @@ async def delete_lot(lot_name: str):
         api_cfg.remove_section(lot_name)
     if lot_name in auto_cfg:
         auto_cfg.remove_section(lot_name)
-    save_cfgs(api_cfg, auto_cfg)
+
+    # Write both configs
+    with open(API_DELIVERY_CFG, "w", encoding="utf-8") as f:
+        api_cfg.write(f)
+
+    write_auto_delivery_cfg(auto_cfg)
+
     return RedirectResponse(url="/lots", status_code=303)
