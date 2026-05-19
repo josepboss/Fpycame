@@ -88,7 +88,7 @@ def hstore_request(method: str, path: str, query: str = "", body: Optional[Dict]
     timestamp = str(int(time.time()))
     nonce = secrets.token_hex(16)
     body_json = json.dumps(body, separators=(",", ":")) if body else ""
-    body_hash = hashlib.sha256(body_json.encode()).hexdigest()
+    body_hash = hashlib.sha256(body_json.encode()).hexdigest() if body_json else ""
 
     canonical = f"{method.upper()}\n{path}\n{query}\n{timestamp}\n{nonce}\n{body_hash}"
     signature = hmac.new(api_secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()
