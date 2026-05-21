@@ -1,5 +1,6 @@
 import re
 import subprocess
+from urllib.parse import unquote
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -118,8 +119,11 @@ async def save_lot(
         )
 
 
-@router.get("/delete/{lot_name}")
+@router.get("/delete/{lot_name:path}")
 async def delete_lot(lot_name: str):
+    # URL-decode the lot name (handles emojis, spaces, special characters)
+    lot_name = unquote(lot_name)
+
     # Remove from api_delivery.cfg
     api_cfg = get_api_cfg()
     if lot_name in api_cfg:
@@ -128,9 +132,21 @@ async def delete_lot(lot_name: str):
 
     # Remove from auto_delivery.cfg
     auto_cfg = get_auto_cfg()
+    # Also find the stock file name before removing the section
+    stock_file = None
     if lot_name in auto_cfg:
+        stock_file = auto_cfg[lot_name].get("productsFileName")
         auto_cfg.remove_section(lot_name)
     write_auto_cfg(auto_cfg)
+
+    # Delete the corresponding stock file if it exists
+    if stock_file:
+        stock_path = os.path.join("storage/products", stock_file)
+        if os.path.exists(stock_path):
+            try:
+                os.remove(stock_path)
+            except OSError:
+                pass
 
     # Restart Cardinal
     restart_ok = restart_cardinal()
