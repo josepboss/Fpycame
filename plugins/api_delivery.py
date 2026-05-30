@@ -157,14 +157,22 @@ def handle_hstore(crd: Cardinal, event: NewOrderEvent) -> bool:
                     if stock_file:
                         file_path = f"storage/products/{stock_file}"
                         with open(file_path, "w", encoding="utf-8") as f:
-                            f.write("\n".join(items))
+                            f.write("\n".join(items) + "\n")
                         logger.info(f"[API Delivery] HStore: wrote {len(items)} items to {stock_file}")
                         return True
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"[API Delivery] HStore response parse error: {e}")
     else:
-        status = resp.status_code if resp else "No response"
-        logger.error(f"[API Delivery] HStore delivery failed for order {order.id}. Status: {status}")
+        if resp is None:
+            logger.error(f"[API Delivery] HStore order {order.id}: network timeout or connection error")
+        else:
+            try:
+                err = resp.json()
+                err_code = err.get("error", {}).get("code", "unknown")
+                err_msg = err.get("error", {}).get("message", "")
+                logger.error(f"[API Delivery] HStore order {order.id}: HTTP {resp.status_code} - {err_code}: {err_msg}")
+            except Exception:
+                logger.error(f"[API Delivery] HStore order {order.id}: HTTP {resp.status_code}")
     return False
 
 
