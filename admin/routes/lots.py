@@ -65,7 +65,7 @@ async def list_lots(request: Request):
             "id": api_cfg[section].get("product_id") or api_cfg[section].get("service_id", ""),
             "enabled": api_cfg[section].getboolean("enabled", fallback=False),
         })
-    return templates.TemplateResponse(request, "lots.html", {"lots": lots_list})
+    return templates.TemplateResponse("lots.html", {"request": request, "lots": lots_list})
 
 
 @router.post("/save")
@@ -100,9 +100,18 @@ async def save_lot(
     if lot_name not in auto_cfg:
         auto_cfg.add_section(lot_name)
 
-    # Only write the response key (as Cardinal's Telegram bot does)
+    # Write response and productsFileName (Cardinal requires the file to exist)
     auto_cfg[lot_name]["response"] = "Спасибо за покупку, $username!\n\t\n\tВот твой товар:\n\t\n\t$product"
+    safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in lot_name)
+    safe = safe[:80].strip('_') + '.txt'
+    auto_cfg[lot_name]["productsFileName"] = safe
     write_auto_cfg(auto_cfg)
+
+    # Create empty stock file so Cardinal doesn't crash on restart
+    os.makedirs("storage/products", exist_ok=True)
+    stock_path = os.path.join("storage/products", safe)
+    if not os.path.exists(stock_path):
+        open(stock_path, 'w').close()
 
     # --- restart Cardinal via pm2 ---
     restart_ok = restart_cardinal()

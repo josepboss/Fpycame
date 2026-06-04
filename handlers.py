@@ -527,11 +527,11 @@ def setup_event_attributes_handler(c: Cardinal, e: NewOrderEvent, *args):
     for i in range(3):
         for lot_name in c.AD_CFG:
             if i == 0:
-                rule = lot_description == lot_name
+                rule = re.sub(r' +', ' ', lot_description) == re.sub(r' +', ' ', lot_name)
             elif i == 1:
-                rule = lot_description.startswith(lot_name)
+                rule = re.sub(r' +', ' ', lot_description).startswith(re.sub(r' +', ' ', lot_name))
             else:
-                rule = lot_name in lot_description
+                rule = re.sub(r' +', ' ', lot_name) in re.sub(r' +', ' ', lot_description)
 
             if rule:
                 config_section_obj = c.AD_CFG[lot_name]

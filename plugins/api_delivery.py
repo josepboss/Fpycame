@@ -150,6 +150,7 @@ def handle_hstore(crd: Cardinal, event: NewOrderEvent) -> bool:
         try:
             data = resp.json()
             items = data.get("data", {}).get("delivery", {}).get("items", [])
+            logger.info(f"[API Delivery] HStore raw items: {items}")
             if items:
                 ad_cfg = crd.AD_CFG
                 if lot_name in ad_cfg:
@@ -157,7 +158,19 @@ def handle_hstore(crd: Cardinal, event: NewOrderEvent) -> bool:
                     if stock_file:
                         file_path = f"storage/products/{stock_file}"
                         with open(file_path, "w", encoding="utf-8") as f:
-                            f.write("\n".join(items) + "\n")
+                            # FunPay rejects messages with words longer than ~100 chars
+                            # Split long tokens with a space to avoid the restriction
+                            safe_items = []
+                            for item in items:
+                                parts = item.split(":")
+                                safe_parts = []
+                                for part in parts:
+                                    if len(part) > 100:
+                                        # Insert space every 90 chars
+                                        part = " ".join(part[i:i+90] for i in range(0, len(part), 90))
+                                    safe_parts.append(part)
+                                safe_items.append(":".join(safe_parts))
+                            f.write("\n".join(safe_items) + "\n")
                         logger.info(f"[API Delivery] HStore: wrote {len(items)} items to {stock_file}")
                         return True
         except (json.JSONDecodeError, KeyError) as e:
