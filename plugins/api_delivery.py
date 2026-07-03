@@ -162,14 +162,16 @@ def handle_hstore(crd: Cardinal, event: NewOrderEvent) -> bool:
                             # Split long tokens with a space to avoid the restriction
                             safe_items = []
                             for item in items:
-                                parts = item.split(":")
-                                safe_parts = []
-                                for part in parts:
-                                    if len(part) > 100:
-                                        # Insert space every 90 chars
-                                        part = " ".join(part[i:i+90] for i in range(0, len(part), 90))
-                                    safe_parts.append(part)
-                                safe_items.append(":".join(safe_parts))
+                                # Remove any field longer than 80 chars
+                                parts = item.split("|")
+                                cleaned_pipes = []
+                                for pipe_part in parts:
+                                    colon_parts = pipe_part.split(":")
+                                    cleaned_colons = [p for p in colon_parts if len(p) <= 80]
+                                    if cleaned_colons:
+                                        cleaned_pipes.append(":".join(cleaned_colons))
+                                cleaned_item = "|".join(cleaned_pipes)
+                                safe_items.append(cleaned_item)
                             f.write("\n".join(safe_items) + "\n")
                         logger.info(f"[API Delivery] HStore: wrote {len(items)} items to {stock_file}")
                         return True
