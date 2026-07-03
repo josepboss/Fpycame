@@ -24,6 +24,8 @@ async def show_settings(request: Request):
         "hstore_key": api_cfg["hstore"].get("api_key", "") if "hstore" in api_cfg else "",
         "hstore_secret": api_cfg["hstore"].get("api_secret", "") if "hstore" in api_cfg else "",
         "smmcost_key": api_cfg["smmcost"].get("api_key", "") if "smmcost" in api_cfg else "",
+        "dark_key": api_cfg["dark"].get("api_key", "") if "dark" in api_cfg else "",
+        "djekxa_key": api_cfg["djekxa"].get("api_key", "") if "djekxa" in api_cfg else "",
     })
 
 
@@ -41,17 +43,20 @@ async def save_funpay(golden_key: str = Form(...)):
 async def save_api(
         hstore_key: str = Form(""),
         hstore_secret: str = Form(""),
-        smmcost_key: str = Form("")
+        smmcost_key: str = Form(""),
+        dark_key: str = Form(""),
+        djekxa_key: str = Form("")
 ):
     config = configparser.ConfigParser()
     config.read(API_KEYS_CFG, encoding="utf-8")
-    if "hstore" not in config:
-        config.add_section("hstore")
-    if "smmcost" not in config:
-        config.add_section("smmcost")
+    for section in ["hstore", "smmcost", "dark", "djekxa"]:
+        if section not in config:
+            config.add_section(section)
     config["hstore"]["api_key"] = hstore_key
     config["hstore"]["api_secret"] = hstore_secret
     config["smmcost"]["api_key"] = smmcost_key
+    config["dark"]["api_key"] = dark_key
+    config["djekxa"]["api_key"] = djekxa_key
     with open(API_KEYS_CFG, "w", encoding="utf-8") as f:
         config.write(f)
     return RedirectResponse(url="/settings", status_code=303)

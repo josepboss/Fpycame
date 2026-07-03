@@ -83,15 +83,17 @@ async def save_lot(
         api_cfg.add_section(lot_name)
 
     api_cfg[lot_name]["provider"] = provider
-    if provider == "hstore":
-        api_cfg[lot_name]["product_id"] = item_id
-        # remove service_id if it exists from previous smmcost assignment
-        if "service_id" in api_cfg[lot_name]:
-            del api_cfg[lot_name]["service_id"]
-    else:
+
+    # SMMCost uses service_id, all others use product_id
+    if provider == "smmcost":
         api_cfg[lot_name]["service_id"] = item_id
         if "product_id" in api_cfg[lot_name]:
             del api_cfg[lot_name]["product_id"]
+    else:
+        api_cfg[lot_name]["product_id"] = item_id
+        if "service_id" in api_cfg[lot_name]:
+            del api_cfg[lot_name]["service_id"]
+
     api_cfg[lot_name]["enabled"] = "1" if enabled else "0"
     write_api_cfg(api_cfg)
 
