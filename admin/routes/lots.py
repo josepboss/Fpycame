@@ -1,6 +1,6 @@
 import re
 import subprocess
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -55,7 +55,7 @@ def restart_cardinal():
 
 
 @router.get("/")
-async def list_lots(request: Request):
+async def list_lots(request: Request, flash: str = ""):
     api_cfg = get_api_cfg()
     lots_list = []
     for section in api_cfg.sections():
@@ -65,7 +65,7 @@ async def list_lots(request: Request):
             "id": api_cfg[section].get("product_id") or api_cfg[section].get("service_id", ""),
             "enabled": api_cfg[section].getboolean("enabled", fallback=False),
         })
-    return templates.TemplateResponse("lots.html", {"request": request, "lots": lots_list})
+    return templates.TemplateResponse("lots.html", {"request": request, "lots": lots_list, "flash": flash})
 
 
 @router.post("/save")
@@ -118,9 +118,8 @@ async def save_lot(
     # --- restart Cardinal via pm2 ---
     restart_ok = restart_cardinal()
     if restart_ok:
-        return RedirectResponse(url="/lots", status_code=303)
+        return RedirectResponse(url="/lots?flash=Lot+saved+successfully", status_code=303)
     else:
-        # Show a warning but still redirect
         return JSONResponse(
             content={
                 "message": "Saved but Cardinal restart failed. Please restart manually from the Status page.",
@@ -130,44 +129,37 @@ async def save_lot(
         )
 
 
-@router.get("/delete/{lot_name:path}")
-async def delete_lot(lot_name: str):
-    # URL-decode the lot name (handles emojis, spaces, special characters)
-    lot_name = unquote(lot_name)
+@router.post("/delete")
+async def delete_lot(lot_name: str = Form(...)):
+    lot_name = lot_name.strip()
+    stock_file_name = None
 
-    # Remove from api_delivery.cfg
+    # --- 1. Remove from api_delivery.cfg ---
     api_cfg = get_api_cfg()
     if lot_name in api_cfg:
         api_cfg.remove_section(lot_name)
     write_api_cfg(api_cfg)
 
-    # Remove from auto_delivery.cfg
+    # --- 2. Remove from auto_delivery.cfg ---
     auto_cfg = get_auto_cfg()
-    # Also find the stock file name before removing the section
-    stock_file = None
     if lot_name in auto_cfg:
-        stock_file = auto_cfg[lot_name].get("productsFileName")
+        # Grab the stock file name before deleting the section
+        stock_file_name = auto_cfg[lot_name].get("productsFileName")
         auto_cfg.remove_section(lot_name)
     write_auto_cfg(auto_cfg)
 
-    # Delete the corresponding stock file if it exists
-    if stock_file:
-        stock_path = os.path.join("storage/products", stock_file)
+    # --- 3. Delete the corresponding stock file ---
+    if stock_file_name:
+        stock_path = os.path.join("storage/products", stock_file_name)
         if os.path.exists(stock_path):
             try:
                 os.remove(stock_path)
             except OSError:
                 pass
 
-    # Restart Cardinal
-    restart_ok = restart_cardinal()
-    if restart_ok:
-        return RedirectResponse(url="/lots", status_code=303)
-    else:
-        return JSONResponse(
-            content={
-                "message": "Deleted but Cardinal restart failed. Please restart manually from the Status page.",
-                "redirect": "/lots"
-            },
-            status_code=200
-        )
+    # --- 4. Restart Cardinal ---
+    restart_cardinal()
+
+    # --- 5. Redirect with flash message ---
+    flash_msg = quote(f'Offer mapping for "{lot_name}" deleted successfully')
+    return RedirectResponse(url=f"/lots?flash={flash_msg}", status_code=303)
