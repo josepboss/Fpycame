@@ -11,7 +11,7 @@ LOG_FILE = "logs/log.log"
 
 @router.get("/")
 async def show_logs(request: Request):
-    return templates.TemplateResponse(request, "logs.html", {})
+    return templates.TemplateResponse("logs.html", {"request": request})
 
 
 @router.get("/stream")

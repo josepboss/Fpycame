@@ -26,33 +26,40 @@ def _save_json(path, data):
         f.write(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def _load_api_keys():
-    cfg = configparser.ConfigParser()
-    cfg.read(API_KEYS_CFG, encoding="utf-8")
-    return cfg
-
-
-def _save_api_keys(cfg):
-    with open(API_KEYS_CFG, "w", encoding="utf-8") as f:
-        cfg.write(f)
-
-
 def _get_providers_data():
-    """Build the full dashboard data: providers config + health cache."""
+    """
+    Build the full dashboard data from providers_cfg.json (the source of truth).
+    For backward compatibility, also reads api_keys.cfg if it exists,
+    but providers_cfg.json credentials take precedence.
+    """
     pcfg = _load_json(PROVIDERS_CFG)
     hcache = _load_json(HEALTH_CACHE)
-    api_keys = _load_api_keys()
+
+    # Also read api_keys.cfg for backward compatibility
+    api_cfg = configparser.ConfigParser()
+    api_cfg.read(API_KEYS_CFG, encoding="utf-8")
 
     providers = {}
     for name in ["hstore", "smmcost", "dark", "djekxa"]:
         pc = pcfg.get(name, {})
         hc = hcache.get(name, {})
+
+        # Extract credentials from providers_cfg.json
+        creds_list = pc.get("credentials", [])
+        creds = creds_list[0] if creds_list else {}
+
+        # For backward compatibility, also check api_keys.cfg
+        if not creds.get("api_key") and api_cfg.has_section(name):
+            creds["api_key"] = api_cfg[name].get("api_key", "")
+        if not creds.get("api_secret") and api_cfg.has_section(name):
+            creds["api_secret"] = api_cfg[name].get("api_secret", "")
+
         providers[name] = {
             "domain": pc.get("active_domain", f"{name}.com"),
             "domains": pc.get("domains", []),
             "rate_limit": pc.get("rate_limit", 5),
             "auth_type": pc.get("auth_type", "key"),
-            "has_credentials": bool(pc.get("credentials", [])),
+            "has_credentials": bool(creds),
             "is_online": hc.get("is_online", False),
             "last_success_time": hc.get("last_success_time"),
             "last_error_time": hc.get("last_error_time"),
@@ -60,8 +67,8 @@ def _get_providers_data():
             "failed_order_count": hc.get("failed_order_count", 0),
             "successful_order_count": hc.get("successful_order_count", 0),
             "consecutive_failures": hc.get("consecutive_failures", 0),
-            "api_key": api_keys.get(name, {}).get("api_key", ""),
-            "api_secret": api_keys.get(name, {}).get("api_secret", ""),
+            "api_key": creds.get("api_key", ""),
+            "api_secret": creds.get("api_secret", ""),
         }
 
     return {
@@ -112,7 +119,8 @@ async def save_api_keys(
     api_cfg["hstore"] = {"api_key": hstore_key, "api_secret": hstore_secret}
     api_cfg["dark"] = {"api_key": dark_key}
     api_cfg["djekxa"] = {"api_key": djekxa_key}
-    _save_api_keys(api_cfg)
+    with open(API_KEYS_CFG, "w", encoding="utf-8") as f:
+        api_cfg.write(f)
 
     return RedirectResponse(url="/providers", status_code=303)
 
@@ -158,27 +166,26 @@ async def update_offer_monitor(
 
 @router.post("/run_health")
 async def run_health():
-    """Trigger a health check via the plugin's health monitor. Returns JSON result."""
     try:
         from cardinal import Cardinal
         crd = Cardinal()
-        if hasattr(crd, '_offer_monitor'):
-            # Will be handled by the plugin's background loop
-            return JSONResponse({"status": "triggered", "message": "Health checks will run in background."})
+        # Import and run health check
+        from plugins.providers.health import HealthMonitor
+        hm = HealthMonitor(crd)
+        hm.run_checks()
+        return JSONResponse({"status": "done", "message": "Health checks completed."})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-    return JSONResponse({"status": "triggered"})
 
 
 @router.post("/run_offer_check")
 async def run_offer_check():
-    """Trigger an offer monitor refresh."""
     try:
         from cardinal import Cardinal
         crd = Cardinal()
-        if hasattr(crd, '_offer_monitor'):
-            changes = crd._offer_monitor.refresh() if crd._offer_monitor else []
-            return JSONResponse({"status": "done", "changes": len(changes)})
+        from plugins.providers.offer_monitor import OfferMonitor
+        om = OfferMonitor(crd)
+        changes = om.refresh()
+        return JSONResponse({"status": "done", "changes": len(changes)})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-    return JSONResponse({"status": "done", "changes": 0})

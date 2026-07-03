@@ -32,4 +32,4 @@ app.include_router(providers.router, prefix="/providers", tags=["providers"], de
 
 @app.get("/")
 async def root(request: Request, user: str = Depends(get_current_user)):
-    return templates.TemplateResponse(request, "base.html", {"user": user})
+    return templates.TemplateResponse("base.html", {"request": request, "user": user})
