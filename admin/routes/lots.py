@@ -1,11 +1,13 @@
 import re
 import subprocess
 from urllib.parse import unquote, quote
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import configparser
 import os
+
+from admin.auth import get_csrf_token, validate_csrf_token
 
 router = APIRouter()
 templates = Jinja2Templates(directory="admin/templates")
@@ -65,7 +67,13 @@ async def list_lots(request: Request, flash: str = ""):
             "id": api_cfg[section].get("product_id") or api_cfg[section].get("service_id", ""),
             "enabled": api_cfg[section].getboolean("enabled", fallback=False),
         })
-    return templates.TemplateResponse("lots.html", {"request": request, "lots": lots_list, "flash": flash})
+    csrf_token = get_csrf_token()
+    return templates.TemplateResponse("lots.html", {
+        "request": request,
+        "lots": lots_list,
+        "flash": flash,
+        "csrf_token": csrf_token,
+    })
 
 
 @router.post("/save")
@@ -73,8 +81,12 @@ async def save_lot(
     lot_name: str = Form(...),
     provider: str = Form(...),
     item_id: str = Form(...),
-    enabled: bool = Form(False)
+    enabled: bool = Form(False),
+    csrf_token: str = Form(""),
 ):
+    if not csrf_token or not validate_csrf_token(csrf_token):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
     lot_name = lot_name.strip()
 
     # --- update api_delivery.cfg ---
@@ -84,7 +96,6 @@ async def save_lot(
 
     api_cfg[lot_name]["provider"] = provider
 
-    # SMMCost uses service_id, all others use product_id
     if provider == "smmcost":
         api_cfg[lot_name]["service_id"] = item_id
         if "product_id" in api_cfg[lot_name]:
@@ -102,20 +113,18 @@ async def save_lot(
     if lot_name not in auto_cfg:
         auto_cfg.add_section(lot_name)
 
-    # Write response and productsFileName (Cardinal requires the file to exist)
     auto_cfg[lot_name]["response"] = "Спасибо за покупку, $username!\n\t\n\tВот твой товар:\n\t\n\t$product"
     safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in lot_name)
     safe = safe[:80].strip('_') + '.txt'
     auto_cfg[lot_name]["productsFileName"] = safe
     write_auto_cfg(auto_cfg)
 
-    # Create empty stock file so Cardinal doesn't crash on restart
+    # Create empty stock file
     os.makedirs("storage/products", exist_ok=True)
     stock_path = os.path.join("storage/products", safe)
     if not os.path.exists(stock_path):
         open(stock_path, 'w').close()
 
-    # --- restart Cardinal via pm2 ---
     restart_ok = restart_cardinal()
     if restart_ok:
         return RedirectResponse(url="/lots?flash=Lot+saved+successfully", status_code=303)
@@ -130,25 +139,30 @@ async def save_lot(
 
 
 @router.post("/delete")
-async def delete_lot(lot_name: str = Form(...)):
+async def delete_lot(
+    lot_name: str = Form(...),
+    csrf_token: str = Form(""),
+):
+    if not csrf_token or not validate_csrf_token(csrf_token):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
     lot_name = lot_name.strip()
     stock_file_name = None
 
-    # --- 1. Remove from api_delivery.cfg ---
+    # 1. Remove from api_delivery.cfg
     api_cfg = get_api_cfg()
     if lot_name in api_cfg:
         api_cfg.remove_section(lot_name)
     write_api_cfg(api_cfg)
 
-    # --- 2. Remove from auto_delivery.cfg ---
+    # 2. Remove from auto_delivery.cfg
     auto_cfg = get_auto_cfg()
     if lot_name in auto_cfg:
-        # Grab the stock file name before deleting the section
         stock_file_name = auto_cfg[lot_name].get("productsFileName")
         auto_cfg.remove_section(lot_name)
     write_auto_cfg(auto_cfg)
 
-    # --- 3. Delete the corresponding stock file ---
+    # 3. Delete the stock file
     if stock_file_name:
         stock_path = os.path.join("storage/products", stock_file_name)
         if os.path.exists(stock_path):
@@ -157,9 +171,9 @@ async def delete_lot(lot_name: str = Form(...)):
             except OSError:
                 pass
 
-    # --- 4. Restart Cardinal ---
+    # 4. Restart Cardinal
     restart_cardinal()
 
-    # --- 5. Redirect with flash message ---
+    # 5. Redirect with flash
     flash_msg = quote(f'Offer mapping for "{lot_name}" deleted successfully')
     return RedirectResponse(url=f"/lots?flash={flash_msg}", status_code=303)

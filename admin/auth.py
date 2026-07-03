@@ -1,10 +1,16 @@
 import configparser
 import os
+import secrets
+import logging
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 security = HTTPBasic()
 ADMIN_CFG = "configs/admin.cfg"
+CSRF_TOKEN_FILE = "storage/cache/csrf_token.txt"
+
+logger = logging.getLogger("admin.auth")
 
 
 def init_admin_cfg():
@@ -30,3 +36,26 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
+
+
+def get_csrf_token() -> str:
+    """
+    Return the current CSRF token, generating a new one if it doesn't exist.
+    """
+    os.makedirs("storage/cache", exist_ok=True)
+    if os.path.exists(CSRF_TOKEN_FILE):
+        with open(CSRF_TOKEN_FILE, "r", encoding="utf-8") as f:
+            token = f.read().strip()
+            if token:
+                return token
+    # Generate a new token
+    token = secrets.token_urlsafe(32)
+    with open(CSRF_TOKEN_FILE, "w", encoding="utf-8") as f:
+        f.write(token)
+    return token
+
+
+def validate_csrf_token(token: str) -> bool:
+    """Compare provided token against stored token."""
+    stored = get_csrf_token()
+    return secrets.compare_digest(stored, token)
