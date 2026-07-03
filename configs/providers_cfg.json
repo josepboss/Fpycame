@@ -1,0 +1,44 @@
+{
+  "hstore": {
+    "domains": ["hstora.com", "hstore.site"],
+    "active_domain": "hstora.com",
+    "rate_limit": 5,
+    "auth_type": "hmac",
+    "credentials": []
+  },
+  "smmcost": {
+    "domains": ["smmcost.com"],
+    "active_domain": "smmcost.com",
+    "rate_limit": 3,
+    "auth_type": "key",
+    "credentials": []
+  },
+  "dark": {
+    "domains": ["dark.shopping"],
+    "active_domain": "dark.shopping",
+    "rate_limit": 2,
+    "auth_type": "key",
+    "credentials": []
+  },
+  "djekxa": {
+    "domains": ["djekxa.ru"],
+    "active_domain": "djekxa.ru",
+    "rate_limit": 5,
+    "auth_type": "bearer",
+    "credentials": []
+  },
+  "failover": {
+    "enabled": false,
+    "provider_priority": ["hstore", "dark", "djekxa", "smmcost"]
+  },
+  "offer_monitor": {
+    "enabled": true,
+    "check_interval_minutes": 15,
+    "notify_on_title_change": true,
+    "notify_on_price_change": true,
+    "notify_on_unavailable": true
+  },
+  "health": {
+    "check_interval_minutes": 10
+  }
+}
