@@ -1,13 +1,11 @@
 import os
-from datetime import datetime
 from fastapi import FastAPI, Request, Depends
-from fastapi.templating import Jinja2Templates
+from admin.templating import templates
 from fastapi.staticfiles import StaticFiles
 from admin.auth import get_current_user, translate
 from admin.routes import lots, settings, logs, status, providers, import_offers, login
 
 app = FastAPI(title="FunPay Cardinal Admin", version="1.0.0")
-templates = Jinja2Templates(directory="admin/templates")
 
 @app.middleware("http")
 async def protect_admin_requests(request: Request, call_next):
@@ -24,14 +22,6 @@ async def protect_admin_requests(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store"
     return response
 
-
-# Register custom Jinja2 filter: timestamp to string
-def timestamp_to_str(ts):
-    try:
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
-    except:
-        return "N/A"
-templates.env.filters["timestamp_to_str"] = timestamp_to_str
 
 # Mount static files (if any)
 if not os.path.exists("admin/static"):

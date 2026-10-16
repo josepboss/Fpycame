@@ -6,12 +6,11 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
+from admin.templating import templates
 
 from admin import auth
 
 router = APIRouter()
-templates = Jinja2Templates(directory="admin/templates")
 
 
 def destination(value: str) -> str:

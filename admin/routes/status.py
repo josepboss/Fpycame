@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
+from admin.templating import templates
 import subprocess
 import time
 import json
 
 router = APIRouter()
-templates = Jinja2Templates(directory="admin/templates")
 
 
 def get_pm2_status():
@@ -28,7 +27,7 @@ def get_pm2_status():
 async def show_status(request: Request):
     status, uptime = get_pm2_status()
     uptime_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(uptime / 1000)) if uptime else "N/A"
-    return templates.TemplateResponse("status.html", {
+    return templates.TemplateResponse(request=request, name="status.html", context={
         "request": request, "status": status, "uptime": uptime_str
     })
 

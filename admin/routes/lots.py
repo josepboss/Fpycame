@@ -3,7 +3,7 @@ import subprocess
 from urllib.parse import unquote, quote
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from admin.templating import templates
 import configparser
 import os
 
@@ -13,7 +13,6 @@ from admin.services.delivery_mapping import save_delivery_mapping
 from admin.auth import get_csrf_token, validate_csrf_token
 
 router = APIRouter()
-templates = Jinja2Templates(directory="admin/templates")
 
 API_DELIVERY_CFG = "configs/api_delivery.cfg"
 AUTO_DELIVERY_CFG = "configs/auto_delivery.cfg"

@@ -3,10 +3,9 @@ import os
 import configparser
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from admin.templating import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="admin/templates")
 
 PROVIDERS_CFG = "configs/providers_cfg.json"
 API_KEYS_CFG = "configs/api_keys.cfg"
@@ -36,7 +35,7 @@ def _get_providers_data():
     hcache = _load_json(HEALTH_CACHE)
 
     # Also read api_keys.cfg for backward compatibility
-    api_cfg = configparser.ConfigParser()
+    api_cfg = configparser.ConfigParser(interpolation=None)
     api_cfg.read(API_KEYS_CFG, encoding="utf-8")
 
     providers = {}
@@ -82,7 +81,7 @@ def _get_providers_data():
 @router.get("/")
 async def provider_dashboard(request: Request):
     data = _get_providers_data()
-    return templates.TemplateResponse("providers.html", {"request": request, **data})
+    return templates.TemplateResponse(request=request, name="providers.html", context={"request": request, **data})
 
 
 @router.post("/save_api_keys")
@@ -115,7 +114,7 @@ async def save_api_keys(
     _save_json(PROVIDERS_CFG, cfg)
 
     # Also update api_keys.cfg for backward compatibility
-    api_cfg = configparser.ConfigParser()
+    api_cfg = configparser.ConfigParser(interpolation=None)
     api_cfg["hstore"] = {"api_key": hstore_key, "api_secret": hstore_secret}
     api_cfg["dark"] = {"api_key": dark_key}
     api_cfg["djekxa"] = {"api_key": djekxa_key}

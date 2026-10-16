@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.templating import Jinja2Templates
+from admin.templating import templates
 from fastapi.responses import Response
 
 from admin.auth import get_csrf_token, validate_csrf_token
@@ -26,7 +26,6 @@ from admin.routes.lots import restart_cardinal
 from urllib.parse import parse_qs, urlsplit
 
 router = APIRouter()
-templates = Jinja2Templates(directory="admin/templates")
 logger = logging.getLogger("FPC.admin.import")
 DB_PATH = Path("storage/cache/offer_imports.sqlite3")
 

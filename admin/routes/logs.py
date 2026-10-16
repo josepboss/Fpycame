@@ -1,17 +1,16 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
-from fastapi.templating import Jinja2Templates
+from admin.templating import templates
 import os
 
 router = APIRouter()
-templates = Jinja2Templates(directory="admin/templates")
 
 LOG_FILE = "logs/log.log"
 
 
 @router.get("/")
 async def show_logs(request: Request):
-    return templates.TemplateResponse("logs.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="logs.html", context={"request": request})
 
 
 @router.get("/stream")
