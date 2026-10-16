@@ -107,6 +107,7 @@ class WorkflowTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.start_patch('admin.routes.import_offers.DB_PATH', Path(self.temp.name) / 'imports.sqlite3')
+        self.start_patch('admin.services.offer_stock.DB_PATH', Path(self.temp.name) / 'stock.sqlite3')
         self.start_patch('admin.routes.import_offers.get_csrf_token', return_value='csrf')
         self.start_patch('admin.routes.import_offers.validate_csrf_token', side_effect=lambda t: t == 'csrf')
         self.product = Product(1358, URL, 'Twitter & Email', 'Full description\nLine two', '0.50', 2126)
@@ -179,6 +180,37 @@ class WorkflowTests(unittest.TestCase):
         self.account.method.reset_mock()
         self.assertIn('already listed', self.publish(draft).text)
         self.account.session.post.assert_called_once()
+
+    def test_successful_publication_persists_supplier_mapping(self):
+        self.account.session.post.return_value.json.return_value = {'done': True, 'offer_id': 79665384}
+        self.publish(self.preview())
+        from admin.services.offer_stock import mappings
+        rows = mappings(123)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['offer_id'],79665384)
+        self.assertEqual(rows[0]['source_url'],URL)
+        self.assertEqual(rows[0]['title'], self.product.title)
+
+    def test_existing_offer_can_be_mapped_without_publishing(self):
+        self.account.get_lot_fields.return_value = SimpleNamespace(
+            lot_id=79665384, fields={'node_id':'1259'},title_en='Twitter',title_ru='')
+        response = self.client.post('/imports/track', data={'csrf_token':'csrf','product_url':URL,
+            'offer_url':'https://funpay.com/en/lots/offerEdit?node=1259&offer=79665384'})
+        self.assertIn('Stock mapping saved',response.text)
+        from admin.services.offer_stock import mappings
+        self.assertEqual(mappings(123)[0]['offer_id'],79665384)
+        self.account.session.post.assert_not_called()
+
+    def test_mapping_rejects_csrf_and_wrong_category(self):
+        data = {'csrf_token':'bad','product_url':URL,
+                'offer_url':'https://funpay.com/en/lots/offerEdit?node=1259&offer=79665384'}
+        self.assertEqual(self.client.post('/imports/track',data=data).status_code,403)
+        data['csrf_token']='csrf'
+        self.account.get_lot_fields.return_value = SimpleNamespace(lot_id=79665384,fields={'node_id':'777'})
+        response=self.client.post('/imports/track',data=data)
+        self.assertIn('Could not link',response.text)
+        from admin.services.offer_stock import mappings
+        self.assertEqual(mappings(123),[])
 
     def test_untrusted_draft_stock_and_markup_cannot_publish(self):
         draft = self.preview()

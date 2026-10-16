@@ -188,3 +188,37 @@ The login form has no external script or stylesheet dependency.
 Deploy the updated files and restart `funpay-admin`; `funpay-cardinal` does not
 need restarting for this change. A separately configured Nginx `auth_basic` rule
 can still display its own popup; this change replaces the application's login only.
+
+## Imported offer stock monitoring
+
+Every new successful import now saves a durable HStore → FunPay stock mapping in
+`storage/cache/offer_stock.sqlite3`, separate from delivery configuration. Preserve
+this file across deployments. The **Imported Offer Stock Monitor** Cardinal plugin
+checks these products about once a minute. When a successful check returns zero
+stock, it fetches the mapped offer, unchecks **Active**, saves, and verifies the
+saved state. Failed supplier checks never count as zero. When stock returns, the monitor reactivates offers it previously paused and caps
+the restored quantity at the available supplier stock. Manually disabled offers
+stay disabled. Pause ownership survives restarts; old mappings without ownership
+information are not automatically reactivated.
+
+The Imports page shows the saved product, FunPay link, last known stock, and monitor
+status. If FunPay's creation response does not include an offer ID, the monitor
+resolves a single exact matching title in that account/category before saving the
+permanent ID. Ambiguous matches are left unchanged. The monitor only handles the
+FunPay account used by the running Cardinal process.
+
+Older completed imports are recovered from their saved preview when available.
+For an existing offer or an edited title, open **Imports → Link an existing FunPay
+offer**, enter the HStore product URL and the complete FunPay edit URL containing
+both `node` and `offer`, and save. The configured FunPay account must have access
+to that editor. This action creates a monitoring link; it does not publish an offer
+or change its delivery configuration.
+
+Deploy the plugin and service files, then restart **both** PM2 processes:
+
+```sh
+pm2 restart funpay-admin funpay-cardinal
+```
+
+Ensure **Imported Offer Stock Monitor** is enabled in Cardinal's plugins. Monitor
+failures appear in the Cardinal logs under `FPC.offer_stock`.

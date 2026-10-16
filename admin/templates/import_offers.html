@@ -3,6 +3,7 @@
 <h1 class="text-2xl font-bold mb-2">{{ _('oi_heading') }}</h1>
 <p class="text-gray-600 mb-6">{{ _('oi_intro') }}</p>
 {% if error %}<div role="alert" class="border border-red-300 bg-red-50 text-red-800 p-4 rounded mb-6">{{ _(error) }}{% if error_detail %}<p class="mt-2 whitespace-pre-line">{{ error_detail }}</p>{% endif %}</div>{% endif %}
+{% if mapping_saved %}<p role="status" class="bg-green-50 p-4 mb-6">{{ _('oi_mapping_saved') }}</p>{% endif %}
 {% if success %}
 <div role="status" class="bg-green-50 border border-green-300 p-4 rounded mb-6">
     <p class="font-semibold">{{ _('oi_success') }}</p>
@@ -81,4 +82,27 @@ document.getElementById('publishForm').addEventListener('submit', () => {
 });
 </script>
 {% endif %}
+<section class="mt-8 border-t pt-6">
+    <h2 class="text-xl font-semibold mb-3">{{ _('oi_stock_heading') }}</h2>
+    <p class="text-sm text-gray-600 mb-4">{{ _('oi_stock_hint') }}</p>
+    <details class="mb-5">
+        <summary class="cursor-pointer text-blue-700">{{ _('oi_track_existing') }}</summary>
+        <form action="/imports/track" method="post" class="space-y-3 mt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label class="block">{{ _('oi_url') }}<input type="url" name="product_url" required class="block w-full border p-2 rounded"></label>
+            <label class="block">{{ _('oi_offer_link') }}<input type="url" name="offer_url" required placeholder="https://funpay.com/en/lots/offerEdit?node=1259&amp;offer=79665384" class="block w-full border p-2 rounded"></label>
+            <button class="bg-blue-600 text-white p-2 rounded">{{ _('oi_save_mapping') }}</button>
+        </form>
+    </details>
+    <div class="overflow-x-auto"><table class="w-full text-left">
+        <thead><tr><th class="p-2">{{ _('oi_title') }}</th><th class="p-2">HStore</th><th class="p-2">FunPay</th><th class="p-2">{{ _('oi_available') }}</th><th class="p-2">{{ _('oi_stock_status') }}</th></tr></thead>
+        <tbody>{% for mapping in stock_mappings %}<tr class="border-t">
+            <td class="p-2">{{ mapping.title }}</td>
+            <td class="p-2"><a class="text-blue-700 underline" href="{{ mapping.source_url }}" target="_blank" rel="noopener">#{{ mapping.product }}</a></td>
+            <td class="p-2">{% if mapping.offer_id %}<a class="text-blue-700 underline" href="https://funpay.com/en/lots/offerEdit?node={{ mapping.node }}&amp;offer={{ mapping.offer_id }}" target="_blank" rel="noopener">#{{ mapping.offer_id }}</a>{% else %}{{ _('oi_stock_pending') }}{% endif %}</td>
+            <td class="p-2">{{ mapping.last_stock if mapping.last_stock is not none else '—' }}</td>
+            <td class="p-2">{{ _('oi_stock_error') if mapping.last_error else _('oi_stock_' + mapping.state) }}</td>
+        </tr>{% endfor %}</tbody>
+    </table></div>
+</section>
 {% endblock %}

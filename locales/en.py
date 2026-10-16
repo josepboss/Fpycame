@@ -698,3 +698,17 @@ oi_description_trimmed = 'The imported description was shortened to 817 characte
 oi_description_length = 'Description must contain 1–817 characters. Shorten it and try again.'
 
 oi_republish_deleted = 'I deleted the previous offer from FunPay and want to republish it. Import a fresh preview first. This cannot retry an uncertain submission.'
+
+# Imported offer stock monitoring
+oi_stock_heading = 'Supplier stock monitoring'
+oi_stock_hint = 'New imports stay linked to their HStore product. The Cardinal stock monitor checks every 60 seconds and deactivates the linked FunPay offer at zero stock. Failed checks leave the offer unchanged. Offers paused by the monitor reactivate when stock returns; manually disabled offers stay disabled.'
+oi_track_existing = 'Link an existing FunPay offer'
+oi_offer_link = 'FunPay offer edit link (with node and offer IDs)'
+oi_save_mapping = 'Save stock mapping'
+oi_mapping_saved = 'Stock mapping saved. The Cardinal monitor will check this offer on its next cycle.'
+oi_bad_mapping = 'Could not link the product and offer. Check the URLs, category, product availability, and configured FunPay account.'
+oi_stock_status = 'Monitor status'
+oi_stock_pending = 'Awaiting first check'
+oi_stock_monitoring = 'Monitoring'
+oi_stock_inactive = 'Inactive: supplier stock is zero'
+oi_stock_error = 'Check failed; see Cardinal logs or verify mapping'

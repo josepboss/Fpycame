@@ -15,6 +15,9 @@ class AdminLoginTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         folder = Path(self.temp.name)
+        stock_patch = patch('admin.services.offer_stock.DB_PATH', folder / 'stock.sqlite3')
+        stock_patch.start()
+        self.addCleanup(stock_patch.stop)
         self.config_path = folder / 'admin.cfg'
         for name, value in [('ADMIN_CFG', str(self.config_path)),
                             ('SESSION_DB', folder / 'sessions.sqlite3'),

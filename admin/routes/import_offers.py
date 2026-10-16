@@ -20,6 +20,8 @@ from admin.auth import get_csrf_token, validate_csrf_token
 from admin.services.offer_import import (ImportFailure, fetch_product, make_account,
                                          prepare_offer, selling_price, submit_offer)
 from locales.localizer import Localizer
+from admin.services import offer_stock
+from urllib.parse import parse_qs, urlsplit
 
 router = APIRouter()
 templates = Jinja2Templates(directory="admin/templates")
@@ -48,7 +50,7 @@ def render(request: Request, **context) -> Response:
     cfg.read("configs/_main.cfg", encoding="utf-8")
     lang = cfg.get("Other", "language", fallback="en")
     localizer = Localizer()
-    context.update(request=request, csrf_token=get_csrf_token(),
+    context.update(request=request, csrf_token=get_csrf_token(), stock_mappings=offer_stock.mappings(),
                    _=lambda key: localizer.translate(key, language=lang))
     return templates.TemplateResponse(request=request, name="import_offers.html", context=context)
 
@@ -132,7 +134,8 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
                 if updated.rowcount != 1:
                     raise ImportFailure("oi_duplicate")
         claimed = True
-        submit_offer(account, fields)
+        result = submit_offer(account, fields)
+        offer_stock.save_mapping(account.id, node, product, title, offer_stock.response_offer_id(result))
         with database() as db:
             db.execute("UPDATE publications SET state = 'published' WHERE draft = ?", (draft,))
         return render(request, success=True, trade_url=f"https://funpay.com/en/lots/{node}/trade",
@@ -150,3 +153,30 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
         logger.error("Offer import failed (%s; exception=%s).",
                      "publish outcome uncertain" if claimed else "preflight", type(exc).__name__)
         return render(request, error="oi_uncertain" if claimed else "oi_connection", **context)
+
+
+@router.post("/track")
+def track_offer(request: Request, product_url: str = Form(...), offer_url: str = Form(...),
+                csrf_token: str = Form("")) -> Response:
+    csrf(csrf_token)
+    try:
+        parts = urlsplit(offer_url)
+        query = parse_qs(parts.query)
+        if (parts.scheme != "https" or parts.netloc != "funpay.com" or
+                parts.path not in ("/lots/offerEdit", "/en/lots/offerEdit")):
+            raise ImportFailure("oi_bad_mapping")
+        node, offer_id = int(query["node"][0]), int(query["offer"][0])
+        if node <= 0 or offer_id <= 0:
+            raise ImportFailure("oi_bad_mapping")
+        product = fetch_product(product_url)
+        account = make_account()
+        fields = account.get_lot_fields(offer_id)
+        if int(fields.lot_id) != offer_id or str(fields.fields.get("node_id")) != str(node):
+            raise ImportFailure("oi_bad_mapping")
+        title = fields.title_en or fields.title_ru
+        offer_stock.save_mapping(account.id, node, product.to_dict(), title, offer_id)
+        return render(request, mapping_saved=True)
+    except (ValueError, KeyError, IndexError):
+        return render(request, error="oi_bad_mapping")
+    except Exception:
+        return render(request, error="oi_connection")
