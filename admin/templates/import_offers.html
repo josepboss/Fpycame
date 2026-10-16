@@ -31,9 +31,9 @@
         <input name="title" maxlength="100" required value="{{ v.title if v.title is defined else product.title }}" class="block w-full border rounded p-2 mt-1">
     </label>
     <label class="block">{{ _('oi_description') }}
-        <textarea id="offerDescription" name="description" rows="14" maxlength="875" required class="block w-full border rounded p-2 mt-1">{{ v.description if v.description is defined else product.description[:875] }}</textarea>
+        <textarea id="offerDescription" name="description" rows="14" maxlength="850" required class="block w-full border rounded p-2 mt-1">{{ v.description if v.description is defined else product.description[:850] }}</textarea>
         <span id="descriptionCount" class="text-sm text-gray-500" aria-live="polite"></span>
-        {% if product.description|length > 875 and not values %}<span class="block text-sm text-amber-700">{{ _('oi_description_trimmed') }}</span>{% endif %}
+        {% if product.description|length > 850 and not values %}<span class="block text-sm text-amber-700">{{ _('oi_description_trimmed') }}</span>{% endif %}
     </label>
     <div class="grid md:grid-cols-3 gap-5">
         <label>{{ _('oi_category') }}
@@ -57,7 +57,7 @@
 <script>
 const description = document.getElementById('offerDescription');
 function updateDescriptionCount() {
-    document.getElementById('descriptionCount').textContent = Array.from(description.value).length + ' / 875';
+    document.getElementById('descriptionCount').textContent = Array.from(description.value).length + ' / 850';
 }
 description.addEventListener('input', updateDescriptionCount);
 updateDescriptionCount();

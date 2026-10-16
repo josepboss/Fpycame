@@ -129,7 +129,7 @@ Open **Lots → Import from HStore**, or `/imports` in the web admin.
 1. Paste an English HStore product URL, for example
    `https://hstora.com/en/product/1358-twitter-2006-2018-microsoft-email-auth-token-2fa`.
 2. Click **Import preview**. Review or edit the copied title and description.
-   Descriptions are limited to 875 characters; longer imports are shortened in the
+   Descriptions are limited to 850 characters; longer imports are shortened in the
    preview with a notice, and the publish endpoint rejects descriptions over the limit.
 3. Choose a FunPay category ID (`1259` for Twitter accounts), quantity, and markup percentage.
 4. Review the calculated unit price and click **Publish to FunPay**.
