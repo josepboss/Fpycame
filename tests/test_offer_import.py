@@ -187,6 +187,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(len(payload['fields[desc][en]']), 875)
         self.assertEqual(len(payload['fields[desc][ru]']), 875)
 
+    def test_browser_crlf_submission_at_description_limit(self):
+        # Textareas display LF but browsers serialize newlines as CRLF.
+        description = ('Account information\n\n' * 30 + 'x' * 875)[:875]
+        self.assertEqual(len(description), 875)
+        submitted = description.replace('\n', '\r\n')
+        self.assertGreater(len(submitted), 875)
+        response = self.publish(self.preview(), description=submitted)
+        self.assertIn('Offer published successfully', response.text)
+        payload = self.account.session.post.call_args.kwargs['data']
+        self.assertEqual(payload['fields[desc][en]'], description)
+        self.assertNotIn('\r', payload['fields[desc][en]'])
+
     def test_imported_description_is_shortened_in_preview(self):
         self.product.description = 'x' * 900
         self.preview()

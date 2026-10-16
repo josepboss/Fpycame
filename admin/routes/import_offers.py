@@ -88,14 +88,19 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
     if row is None or row["created"] < time.time() - 86400:
         return render(request, error="oi_expired")
     product = json.loads(row["product"])
+    # HTML form submission serializes textarea newlines as CRLF, while the
+    # browser's value/counter uses LF. Normalize before counting or sending.
+    description = description.replace("\r\n", "\n").replace("\r", "\n").strip()
     values = dict(title=title, description=description, node=node, quantity=quantity, markup=markup)
     context = dict(product=product, draft=draft, values=values)
     claimed = False
     account = None
     try:
         title, description = title.strip(), description.strip()
-        if not title or not description or len(title) > 100 or len(description) > 875 or not 1 <= node <= 1000000:
+        if not title or len(title) > 100 or not 1 <= node <= 1000000:
             raise ImportFailure("oi_invalid")
+        if not description or len(description) > 875:
+            raise ImportFailure("oi_description_length")
         if not 1 <= quantity <= product["stock"]:
             raise ImportFailure("oi_stock")
         price = selling_price(product["price"], markup)

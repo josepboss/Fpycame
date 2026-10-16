@@ -694,3 +694,5 @@ auth_logout_hint = 'Sign out of this admin session?'
 auth_csrf = 'Session form expired or request origin invalid. Reload the page and try again.'
 
 oi_description_trimmed = 'The imported description was shortened to 875 characters. Review and edit it before publishing.'
+
+oi_description_length = 'Description must contain 1–875 characters. Shorten it and try again.'
