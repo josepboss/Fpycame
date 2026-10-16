@@ -142,8 +142,20 @@ The English text is copied into both FunPay language fields.
 
 Publishing uses the FunPay account configured in `configs/_main.cfg`, including
 its user agent and enabled proxy. The browser login is independent of this account.
-No HStore purchase is made, and delivery mappings are not modified. Configure the
-existing delivery plugin through **Lots** before accepting orders on the new listing.
+Each successful publication automatically creates an enabled HStore delivery mapping
+in **Lots**, using the exact published title and supplier product ID. It creates the
+local product file when missing and preserves existing inventory and custom response
+text for compatible mappings. Cardinal is automatically restarted to load the mapping.
+No HStore purchase occurs during publication; the already configured API Delivery
+plugin purchases and delivers goods when a paid order arrives.
+
+If the published title already maps to a different provider/product, publishing is
+blocked until the conflict is resolved in Lots. If mapping or restart fails after
+publication, the success page reports that delivery setup needs attention; do not
+publish the offer again. Stock-file auto-disable/restore are disabled for imported
+lots because goods are fetched on demand and the supplier stock monitor manages
+availability. Global auto-delivery and the existing API Delivery plugin must remain
+enabled with working HStore credentials.
 
 A preview lasts 24 hours. Price and stock are checked again before publishing.
 Publication records in `storage/cache/offer_imports.sqlite3` prevent repeated

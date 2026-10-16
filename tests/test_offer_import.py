@@ -108,6 +108,11 @@ class WorkflowTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.start_patch('admin.routes.import_offers.DB_PATH', Path(self.temp.name) / 'imports.sqlite3')
         self.start_patch('admin.services.offer_stock.DB_PATH', Path(self.temp.name) / 'stock.sqlite3')
+        self.start_patch('admin.services.delivery_mapping.API_CFG', Path(self.temp.name) / 'api.cfg')
+        self.start_patch('admin.services.delivery_mapping.AUTO_CFG', Path(self.temp.name) / 'auto.cfg')
+        self.start_patch('admin.services.delivery_mapping.PRODUCTS', Path(self.temp.name) / 'products')
+        self.start_patch('admin.routes.lots.API_DELIVERY_CFG', str(Path(self.temp.name) / 'api.cfg'))
+        self.restart = self.start_patch('admin.routes.import_offers.restart_cardinal', return_value=True)
         self.start_patch('admin.routes.import_offers.get_csrf_token', return_value='csrf')
         self.start_patch('admin.routes.import_offers.validate_csrf_token', side_effect=lambda t: t == 'csrf')
         self.product = Product(1358, URL, 'Twitter & Email', 'Full description\nLine two', '0.50', 2126)
@@ -180,6 +185,48 @@ class WorkflowTests(unittest.TestCase):
         self.account.method.reset_mock()
         self.assertIn('already listed', self.publish(draft).text)
         self.account.session.post.assert_called_once()
+
+    def test_successful_publication_enables_delivery_and_appears_in_lots(self):
+        self.publish(self.preview())
+        from admin.services.delivery_mapping import read_configs, PRODUCTS
+        api, auto = read_configs()
+        self.assertEqual(api[self.product.title]['provider'],'hstore')
+        self.assertEqual(api[self.product.title]['product_id'],'1358')
+        self.assertEqual(api[self.product.title]['enabled'],'1')
+        self.assertIn('$product',auto[self.product.title]['response'])
+        self.assertEqual(auto[self.product.title]['disable'],'0')
+        self.assertEqual(auto[self.product.title]['disableAutoDisable'],'1')
+        self.assertEqual(auto[self.product.title]['disableAutoRestore'],'1')
+        self.assertTrue((PRODUCTS/auto[self.product.title]['productsFileName']).exists())
+        self.restart.assert_called_once()
+        with patch('admin.routes.lots.get_csrf_token',return_value='csrf'):
+            self.assertIn('Twitter &amp; Email',self.client.get('/lots/').text)
+
+    def test_delivery_restart_failure_keeps_publish_success_and_mapping(self):
+        self.restart.return_value=False
+        draft=self.preview()
+        response=self.publish(draft)
+        self.assertIn('Offer published successfully',response.text)
+        self.assertIn('Cardinal restart failed',response.text)
+        self.assertIn('already listed',self.publish(draft).text)
+        self.account.session.post.assert_called_once()
+
+    def test_delivery_write_failure_does_not_invite_duplicate_publish(self):
+        draft=self.preview()
+        with patch('admin.routes.import_offers.save_delivery_mapping',side_effect=OSError()):
+            response=self.publish(draft)
+        self.assertIn('Offer published successfully',response.text)
+        self.assertIn('delivery mapping could not be saved',response.text)
+        self.assertIn('already listed',self.publish(draft).text)
+        self.restart.assert_not_called()
+
+    def test_conflicting_delivery_mapping_blocks_publish(self):
+        from admin.services.delivery_mapping import save_delivery_mapping
+        save_delivery_mapping(self.product.title,'hstore','999',True)
+        response=self.publish(self.preview())
+        self.assertIn('incompatible delivery mapping',response.text)
+        self.account.session.post.assert_not_called()
+        self.restart.assert_not_called()
 
     def test_successful_publication_persists_supplier_mapping(self):
         self.account.session.post.return_value.json.return_value = {'done': True, 'offer_id': 79665384}

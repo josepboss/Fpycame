@@ -21,6 +21,8 @@ from admin.services.offer_import import (ImportFailure, fetch_product, make_acco
                                          prepare_offer, selling_price, submit_offer)
 from locales.localizer import Localizer
 from admin.services import offer_stock
+from admin.services.delivery_mapping import check_import_mapping, save_delivery_mapping, MappingConflict
+from admin.routes.lots import restart_cardinal
 from urllib.parse import parse_qs, urlsplit
 
 router = APIRouter()
@@ -117,6 +119,10 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
         existing = account.get_my_subcategory_lots(node, locale="en")
         if any(lot.description == title for lot in existing):
             raise ImportFailure("oi_duplicate")
+        try:
+            check_import_mapping(title, product["product_id"])
+        except MappingConflict:
+            raise ImportFailure("oi_delivery_conflict")
         with database() as db:
             try:
                 db.execute("INSERT INTO publications VALUES (?, ?, ?, ?, ?)",
@@ -138,8 +144,18 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
         offer_stock.save_mapping(account.id, node, product, title, offer_stock.response_offer_id(result))
         with database() as db:
             db.execute("UPDATE publications SET state = 'published' WHERE draft = ?", (draft,))
+        # Publishing already succeeded. Mapping/restart errors must never invite
+        # another publish and create a duplicate public offer.
+        delivery_status = "oi_delivery_ready"
+        try:
+            save_delivery_mapping(title, 'hstore', str(product["product_id"]), True, imported=True)
+            if not restart_cardinal():
+                delivery_status = "oi_delivery_restart"
+        except Exception as exc:
+            logger.error("Published offer delivery setup failed (%s).", type(exc).__name__)
+            delivery_status = "oi_delivery_failed"
         return render(request, success=True, trade_url=f"https://funpay.com/en/lots/{node}/trade",
-                      published_title=title, price=price)
+                      published_title=title, price=price, delivery_status=delivery_status)
     except ImportFailure as exc:
         code = str(exc)
         if claimed and code == "oi_rejected":

@@ -8,6 +8,7 @@ import configparser
 import os
 
 from locales.localizer import Localizer
+from admin.services.delivery_mapping import save_delivery_mapping
 
 from admin.auth import get_csrf_token, validate_csrf_token
 
@@ -92,41 +93,7 @@ async def save_lot(
 
     lot_name = lot_name.strip()
 
-    # --- update api_delivery.cfg ---
-    api_cfg = get_api_cfg()
-    if lot_name not in api_cfg:
-        api_cfg.add_section(lot_name)
-
-    api_cfg[lot_name]["provider"] = provider
-
-    if provider == "smmcost":
-        api_cfg[lot_name]["service_id"] = item_id
-        if "product_id" in api_cfg[lot_name]:
-            del api_cfg[lot_name]["product_id"]
-    else:
-        api_cfg[lot_name]["product_id"] = item_id
-        if "service_id" in api_cfg[lot_name]:
-            del api_cfg[lot_name]["service_id"]
-
-    api_cfg[lot_name]["enabled"] = "1" if enabled else "0"
-    write_api_cfg(api_cfg)
-
-    # --- update auto_delivery.cfg ---
-    auto_cfg = get_auto_cfg()
-    if lot_name not in auto_cfg:
-        auto_cfg.add_section(lot_name)
-
-    auto_cfg[lot_name]["response"] = "Спасибо за покупку, $username!\n\t\n\tВот твой товар:\n\t\n\t$product"
-    safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in lot_name)
-    safe = safe[:80].strip('_') + '.txt'
-    auto_cfg[lot_name]["productsFileName"] = safe
-    write_auto_cfg(auto_cfg)
-
-    # Create empty stock file
-    os.makedirs("storage/products", exist_ok=True)
-    stock_path = os.path.join("storage/products", safe)
-    if not os.path.exists(stock_path):
-        open(stock_path, 'w').close()
+    save_delivery_mapping(lot_name, provider, item_id, enabled)
 
     restart_ok = restart_cardinal()
     if restart_ok:
