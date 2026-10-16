@@ -133,8 +133,9 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
                 db.execute("DELETE FROM publications WHERE draft = ?", (draft,))
         elif claimed:
             code = "oi_uncertain"
-        return render(request, error=code, **context)
-    except Exception:
+        return render(request, error=code, error_detail=exc.details if code == "oi_rejected" else "", **context)
+    except Exception as exc:
         # Do not expose credentials or remote HTML in an HTTP error response.
-        logger.error("Offer import failed (%s).", "publish outcome uncertain" if claimed else "preflight")
+        logger.error("Offer import failed (%s; exception=%s).",
+                     "publish outcome uncertain" if claimed else "preflight", type(exc).__name__)
         return render(request, error="oi_uncertain" if claimed else "oi_connection", **context)

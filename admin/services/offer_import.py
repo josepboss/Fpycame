@@ -16,7 +16,11 @@ from bs4 import BeautifulSoup
 
 
 class ImportFailure(ValueError):
-    """A localized error code safe to display in the admin."""
+    """A localized error code with optional sanitized remote validation details."""
+
+    def __init__(self, code: str, details: str = "") -> None:
+        super().__init__(code)
+        self.details = details
 
 
 @dataclass
@@ -174,6 +178,34 @@ def prepare_offer(account: Account, node: int, title: str, description: str,
     return fields
 
 
+def rejection_details(result: dict, sensitive_values: list[str]) -> str:
+    """Extract validation messages only; never expose the raw response or cookies."""
+    messages = []
+    if isinstance(result.get("error"), str):
+        messages.append(result["error"])
+    errors = result.get("errors", [])
+    if isinstance(errors, dict):
+        errors = list(errors.items())
+    if isinstance(errors, list):
+        for error in errors[:10]:
+            if isinstance(error, (list, tuple)) and len(error) == 2:
+                field, message = error
+                if isinstance(field, str) and isinstance(message, str):
+                    messages.append(f"{field}: {message}")
+            elif isinstance(error, str):
+                messages.append(error)
+    # Strip remote markup and redact known credentials before displaying anything.
+    text = "\n".join(messages)
+    for value in sorted((v for v in sensitive_values if isinstance(v, str) and v), key=len, reverse=True):
+        text = text.replace(value, "[redacted]")
+    text = re.sub(r"(?i)(golden_key|phpsessid|csrf_token|api_key|password)(\s*[=:]\s*)[^\s<>&]+",
+                  r"\1\2[redacted]", text)
+    soup = BeautifulSoup(text, "lxml")
+    for element in soup.select("script, style"):
+        element.decompose()
+    return soup.get_text(" ", strip=True)[:1500]
+
+
 def submit_offer(account: Account, fields: dict[str, str]) -> dict:
     # The legacy client retries POSTs on 5xx/read errors. Creation must be sent
     # exactly once: a lost response must never create a second public listing.
@@ -193,7 +225,9 @@ def submit_offer(account: Account, fields: dict[str, str]) -> dict:
     if not isinstance(result, dict):
         raise ImportFailure("oi_uncertain")
     if result.get("error") or result.get("errors"):
-        raise ImportFailure("oi_rejected")
+        details = rejection_details(result, [account.golden_key, account.phpsessid,
+                                             fields.get("csrf_token", "")])
+        raise ImportFailure("oi_rejected", details)
     if result.get("done") is not True and not result.get("url") and not result.get("offer_id"):
         raise ImportFailure("oi_uncertain")
     return result

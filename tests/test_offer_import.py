@@ -11,7 +11,7 @@ from admin.auth import get_current_user
 from admin.routes import import_offers as routes
 from admin.services.offer_import import (
     ImportFailure, Product, fetch_product, new_offer_fields, parse_product,
-    product_url, selling_price, submit_offer,
+    product_url, selling_price, submit_offer, rejection_details,
 )
 
 URL = 'https://hstora.com/en/product/1358-twitter-2006-2018-microsoft-email-auth-token-2fa'
@@ -80,6 +80,17 @@ class ProductTests(unittest.TestCase):
                      FORM.replace('</form>', '<select name="fields[server]"><option>A</option></select></form>')]:
             with self.subTest(html=html), self.assertRaises(ImportFailure):
                 new_offer_fields(html, 1259)
+
+    def test_remote_rejection_details_are_sanitized_and_redacted(self):
+        details = rejection_details({'error': '<b>Invalid request</b>', 'errors': [
+            ['price', 'Too low'], ['csrf_token', 'Invalid secret-token'],
+            ['field', '<script>alert(1)</script>golden_key=private-key']]},
+            ['secret-token', 'private-key'])
+        self.assertIn('price: Too low', details)
+        self.assertNotIn('secret-token', details)
+        self.assertNotIn('private-key', details)
+        self.assertNotIn('<script>', details)
+        self.assertNotIn('alert(1)', details)
 
     def test_remote_errors_and_ambiguous_response(self):
         account = Mock()
@@ -232,7 +243,9 @@ class WorkflowTests(unittest.TestCase):
     def test_explicit_rejection_allows_retry(self):
         draft = self.preview()
         self.account.session.post.return_value.json.return_value = {'errors': [['price', 'too low']]}
-        self.assertIn('FunPay rejected', self.publish(draft).text)
+        response = self.publish(draft)
+        self.assertIn('FunPay rejected', response.text)
+        self.assertIn('price: too low', response.text)
         self.account.session.post.return_value.json.return_value = {'done': True}
         self.assertIn('Offer published successfully', self.publish(draft).text)
 

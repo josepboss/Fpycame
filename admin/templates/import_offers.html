@@ -2,7 +2,7 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-2">{{ _('oi_heading') }}</h1>
 <p class="text-gray-600 mb-6">{{ _('oi_intro') }}</p>
-{% if error %}<div role="alert" class="border border-red-300 bg-red-50 text-red-800 p-4 rounded mb-6">{{ _(error) }}</div>{% endif %}
+{% if error %}<div role="alert" class="border border-red-300 bg-red-50 text-red-800 p-4 rounded mb-6">{{ _(error) }}{% if error_detail %}<p class="mt-2 whitespace-pre-line">{{ error_detail }}</p>{% endif %}</div>{% endif %}
 {% if success %}
 <div role="status" class="bg-green-50 border border-green-300 p-4 rounded mb-6">
     <p class="font-semibold">{{ _('oi_success') }}</p>
