@@ -94,7 +94,7 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
     account = None
     try:
         title, description = title.strip(), description.strip()
-        if not title or not description or len(title) > 100 or len(description) > 10000 or not 1 <= node <= 1000000:
+        if not title or not description or len(title) > 100 or len(description) > 875 or not 1 <= node <= 1000000:
             raise ImportFailure("oi_invalid")
         if not 1 <= quantity <= product["stock"]:
             raise ImportFailure("oi_stock")

@@ -31,7 +31,9 @@
         <input name="title" maxlength="100" required value="{{ v.title if v.title is defined else product.title }}" class="block w-full border rounded p-2 mt-1">
     </label>
     <label class="block">{{ _('oi_description') }}
-        <textarea name="description" rows="14" maxlength="10000" required class="block w-full border rounded p-2 mt-1">{{ v.description if v.description is defined else product.description }}</textarea>
+        <textarea id="offerDescription" name="description" rows="14" maxlength="875" required class="block w-full border rounded p-2 mt-1">{{ v.description if v.description is defined else product.description[:875] }}</textarea>
+        <span id="descriptionCount" class="text-sm text-gray-500" aria-live="polite"></span>
+        {% if product.description|length > 875 and not values %}<span class="block text-sm text-amber-700">{{ _('oi_description_trimmed') }}</span>{% endif %}
     </label>
     <div class="grid md:grid-cols-3 gap-5">
         <label>{{ _('oi_category') }}
@@ -53,6 +55,12 @@
     <button type="submit" id="publishButton" {% if product.stock == 0 %}disabled{% endif %} class="bg-green-700 text-white px-6 py-3 rounded disabled:opacity-50">{{ _('oi_publish') }}</button>
 </form>
 <script>
+const description = document.getElementById('offerDescription');
+function updateDescriptionCount() {
+    document.getElementById('descriptionCount').textContent = Array.from(description.value).length + ' / 875';
+}
+description.addEventListener('input', updateDescriptionCount);
+updateDescriptionCount();
 const markup = document.getElementById('markup');
 function updatePrice() {
     const valid = markup.value !== '' && markup.checkValidity();

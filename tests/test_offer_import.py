@@ -176,6 +176,26 @@ class WorkflowTests(unittest.TestCase):
         self.account.method.assert_not_called()
         self.account.session.post.assert_not_called()
 
+    def test_description_limit_accepts_875_and_rejects_876(self):
+        draft = self.preview()
+        response = self.publish(draft, description='x' * 876)
+        self.assertIn('1–875', response.text)
+        self.account.session.post.assert_not_called()
+        response = self.publish(draft, description='x' * 875)
+        self.assertIn('Offer published successfully', response.text)
+        payload = self.account.session.post.call_args.kwargs['data']
+        self.assertEqual(len(payload['fields[desc][en]']), 875)
+        self.assertEqual(len(payload['fields[desc][ru]']), 875)
+
+    def test_imported_description_is_shortened_in_preview(self):
+        self.product.description = 'x' * 900
+        self.preview()
+        response = self.client.post('/imports/preview', data={'csrf_token': 'csrf', 'product_url': URL})
+        self.assertIn('maxlength="875"', response.text)
+        self.assertIn('x' * 875 + '</textarea>', response.text)
+        self.assertNotIn('x' * 876, response.text)
+        self.assertIn('shortened to 875', response.text)
+
     def test_price_change_requires_new_preview(self):
         draft = self.preview()
         self.fetch.return_value = Product(1358, URL, 'Title', 'Description', '0.60', 2126)
