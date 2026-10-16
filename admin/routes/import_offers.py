@@ -81,7 +81,8 @@ def preview(request: Request, product_url: str = Form(...), csrf_token: str = Fo
 @router.post("/publish")
 def publish(request: Request, draft: str = Form(...), title: str = Form(...),
             description: str = Form(...), node: int = Form(...), quantity: int = Form(...),
-            markup: str = Form(...), csrf_token: str = Form("")) -> Response:
+            markup: str = Form(...), csrf_token: str = Form(""),
+            republish_deleted: bool = Form(False)) -> Response:
     csrf(csrf_token)
     with database() as db:
         row = db.execute("SELECT * FROM drafts WHERE id = ?", (draft,)).fetchone()
@@ -119,7 +120,17 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
                 db.execute("INSERT INTO publications VALUES (?, ?, ?, ?, ?)",
                            (account.id, node, product["product_id"], draft, "publishing"))
             except sqlite3.IntegrityError:
-                raise ImportFailure("oi_duplicate")
+                # Only an explicitly confirmed deletion of a completed publish
+                # permits reuse. Never retry pending/uncertain submissions.
+                if not republish_deleted:
+                    raise ImportFailure("oi_duplicate")
+                updated = db.execute(
+                    """UPDATE publications SET draft = ?, state = 'publishing'
+                       WHERE account = ? AND node = ? AND product = ?
+                       AND state = 'published' AND draft != ?""",
+                    (draft, account.id, node, product["product_id"], draft))
+                if updated.rowcount != 1:
+                    raise ImportFailure("oi_duplicate")
         claimed = True
         submit_offer(account, fields)
         with database() as db:

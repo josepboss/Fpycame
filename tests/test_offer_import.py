@@ -130,7 +130,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('Twitter &amp; Email', response.text)
         with routes.database() as db:
-            return db.execute('SELECT id FROM drafts').fetchone()['id']
+            return db.execute('SELECT id FROM drafts ORDER BY created DESC LIMIT 1').fetchone()['id']
 
     def publish(self, draft_id, **changes):
         data = dict(csrf_token='csrf', draft=draft_id, title=self.product.title,
@@ -233,6 +233,31 @@ class WorkflowTests(unittest.TestCase):
         self.account.method.return_value.text = FORM
         self.account.method.reset_mock()
         self.assertIn('already listed', self.publish(self.preview()).text)
+        self.account.session.post.assert_called_once()
+
+    def test_explicit_republish_after_deletion_requires_fresh_preview(self):
+        original = self.preview()
+        self.assertIn('Offer published successfully', self.publish(original).text)
+        self.assertIn('already listed', self.publish(original, republish_deleted='true').text)
+        fresh = self.preview()
+        self.assertIn('Offer published successfully', self.publish(fresh, republish_deleted='true').text)
+        self.assertIn('already listed', self.publish(fresh, republish_deleted='true').text)
+        self.assertEqual(self.account.session.post.call_count, 2)
+
+    def test_republish_cannot_override_uncertain_submission(self):
+        original = self.preview()
+        self.account.session.post.side_effect = TimeoutError()
+        self.publish(original)
+        self.account.session.post.side_effect = None
+        response = self.publish(self.preview(), republish_deleted='true')
+        self.assertIn('already listed', response.text)
+        self.account.session.post.assert_called_once()
+
+    def test_republish_cannot_override_live_matching_offer(self):
+        self.publish(self.preview())
+        self.account.get_my_subcategory_lots.return_value = [SimpleNamespace(description=self.product.title)]
+        response = self.publish(self.preview(), republish_deleted='true')
+        self.assertIn('already listed', response.text)
         self.account.session.post.assert_called_once()
 
     def test_existing_funpay_title_blocks_publish(self):

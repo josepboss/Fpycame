@@ -52,6 +52,10 @@
         <p class="text-sm text-gray-600 mt-2">{{ _('oi_price_hint') }}</p>
     </div>
     <p class="text-sm text-gray-600">{{ _('oi_delivery_hint') }}</p>
+    <label class="block text-sm">
+        <input type="checkbox" name="republish_deleted" value="true">
+        {{ _('oi_republish_deleted') }}
+    </label>
     <button type="submit" id="publishButton" {% if product.stock == 0 %}disabled{% endif %} class="bg-green-700 text-white px-6 py-3 rounded disabled:opacity-50">{{ _('oi_publish') }}</button>
 </form>
 <script>

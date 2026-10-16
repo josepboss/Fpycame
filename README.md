@@ -148,7 +148,11 @@ existing delivery plugin through **Lots** before accepting orders on the new lis
 A preview lasts 24 hours. Price and stock are checked again before publishing.
 Publication records in `storage/cache/offer_imports.sqlite3` prevent repeated
 publication of the same HStore product to the same category/account. Preserve this
-file across restarts. If a request times out after submission, check FunPay manually:
+file across restarts. If you manually delete a successfully published offer on
+FunPay, import a fresh preview and check **I deleted the previous offer from FunPay**
+to republish it. Matching live titles still block publication. Reusing the same
+submitted preview is blocked, as are records with an uncertain outcome.
+If a request times out after submission, check FunPay manually:
 the record remains locked because the offer may already exist. Changing an existing
 listing should be done through FunPay; this importer creates new listings only.
 

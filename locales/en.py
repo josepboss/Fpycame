@@ -696,3 +696,5 @@ auth_csrf = 'Session form expired or request origin invalid. Reload the page and
 oi_description_trimmed = 'The imported description was shortened to 850 characters. Review and edit it before publishing.'
 
 oi_description_length = 'Description must contain 1–850 characters. Shorten it and try again.'
+
+oi_republish_deleted = 'I deleted the previous offer from FunPay and want to republish it. Import a fresh preview first. This cannot retry an uncertain submission.'
