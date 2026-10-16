@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-2">{{ _('oi_heading') }}</h1>
+<p class="text-gray-600 mb-6">{{ _('oi_intro') }}</p>
+{% if error %}<div role="alert" class="border border-red-300 bg-red-50 text-red-800 p-4 rounded mb-6">{{ _(error) }}</div>{% endif %}
+{% if success %}
+<div role="status" class="bg-green-50 border border-green-300 p-4 rounded mb-6">
+    <p class="font-semibold">{{ _('oi_success') }}</p>
+    <p class="my-2">{{ published_title }} — ${{ price }}</p>
+    <a href="{{ trade_url }}" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline">{{ _('oi_view') }}</a>
+</div>
+{% endif %}
+<form action="/imports/preview" method="post" class="flex flex-wrap gap-3 mb-8">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="flex-1 min-w-64">{{ _('oi_url') }}
+        <input name="product_url" type="url" required value="{{ source_url or (product.url if product else '') }}" placeholder="https://hstora.com/en/product/1358-twitter-2006-2018-microsoft-email-auth-token-2fa" class="block w-full border p-2 rounded mt-1">
+    </label>
+    <button class="self-end bg-blue-600 text-white px-5 py-2 rounded">{{ _('oi_fetch') }}</button>
+</form>
+{% if product %}
+{% set v = values or {} %}
+<div class="bg-gray-50 border rounded p-4 mb-5 flex flex-wrap gap-8">
+    <p>{{ _('oi_cost') }} <strong>${{ product.price }} USD</strong></p>
+    <p>{{ _('oi_available') }} <strong>{{ product.stock }}</strong></p>
+    <p>HStore #{{ product.product_id }}</p>
+</div>
+<form action="/imports/publish" method="post" id="publishForm" class="space-y-5">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="draft" value="{{ draft }}">
+    <label class="block">{{ _('oi_title') }}
+        <input name="title" maxlength="100" required value="{{ v.title if v.title is defined else product.title }}" class="block w-full border rounded p-2 mt-1">
+    </label>
+    <label class="block">{{ _('oi_description') }}
+        <textarea name="description" rows="14" maxlength="10000" required class="block w-full border rounded p-2 mt-1">{{ v.description if v.description is defined else product.description }}</textarea>
+    </label>
+    <div class="grid md:grid-cols-3 gap-5">
+        <label>{{ _('oi_category') }}
+            <input type="number" name="node" min="1" max="1000000" required value="{{ v.node or 1259 }}" class="block w-full border rounded p-2 mt-1">
+            <span class="text-sm text-gray-500">{{ _('oi_category_hint') }}</span>
+        </label>
+        <label>{{ _('oi_quantity') }}
+            <input type="number" name="quantity" min="1" max="{{ product.stock }}" required value="{{ v.quantity or product.stock }}" class="block w-full border rounded p-2 mt-1">
+        </label>
+        <label>{{ _('oi_markup') }}
+            <input type="number" id="markup" name="markup" min="0" max="100000" step="0.01" required value="{{ v.markup if v.markup is defined else '' }}" class="block w-full border rounded p-2 mt-1">
+        </label>
+    </div>
+    <div class="bg-blue-50 border border-blue-200 rounded p-4">
+        <p class="text-xl">{{ _('oi_price') }} <strong id="sellingPrice" aria-live="polite">—</strong> USD</p>
+        <p class="text-sm text-gray-600 mt-2">{{ _('oi_price_hint') }}</p>
+    </div>
+    <p class="text-sm text-gray-600">{{ _('oi_delivery_hint') }}</p>
+    <button type="submit" id="publishButton" {% if product.stock == 0 %}disabled{% endif %} class="bg-green-700 text-white px-6 py-3 rounded disabled:opacity-50">{{ _('oi_publish') }}</button>
+</form>
+<script>
+const markup = document.getElementById('markup');
+function updatePrice() {
+    const valid = markup.value !== '' && markup.checkValidity();
+    // Integer cents and hundredths of a percent match server rounding upward.
+    const cents = Math.round(Number({{ product.price | tojson }}) * 100);
+    const basisPoints = Math.round(Number(markup.value) * 100);
+    const result = Math.ceil(cents * (10000 + basisPoints) / 10000);
+    document.getElementById('sellingPrice').textContent = valid ? '$' + (result / 100).toFixed(2) : '—';
+}
+markup.addEventListener('input', updatePrice);
+updatePrice();
+document.getElementById('publishForm').addEventListener('submit', () => {
+    document.getElementById('publishButton').disabled = true;
+});
+</script>
+{% endif %}
+{% endblock %}

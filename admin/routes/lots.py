@@ -7,6 +7,8 @@ from fastapi.templating import Jinja2Templates
 import configparser
 import os
 
+from locales.localizer import Localizer
+
 from admin.auth import get_csrf_token, validate_csrf_token
 
 router = APIRouter()
@@ -68,9 +70,10 @@ async def list_lots(request: Request, flash: str = ""):
             "enabled": api_cfg[section].getboolean("enabled", fallback=False),
         })
     csrf_token = get_csrf_token()
-    return templates.TemplateResponse("lots.html", {
+    return templates.TemplateResponse(request=request, name="lots.html", context={
         "request": request,
         "lots": lots_list,
+        "import_label": Localizer().translate("oi_heading", language="en"),
         "flash": flash,
         "csrf_token": csrf_token,
     })

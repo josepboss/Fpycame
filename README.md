@@ -121,3 +121,45 @@
 
 Если вам удобно пользоваться FunPay Cardinal, не забудьте поставить :star: звезду :star: данному проекту в правом
 верхнем углу GitHub-страницы (нужно быть авторизованным в свой аккаунт) :)
+
+## HStore → FunPay offer import (web admin)
+
+Open **Lots → Import from HStore**, or `/imports` in the web admin.
+
+1. Paste an English HStore product URL, for example
+   `https://hstora.com/en/product/1358-twitter-2006-2018-microsoft-email-auth-token-2fa`.
+2. Click **Import preview**. Review or edit the copied title and full description.
+3. Choose a FunPay category ID (`1259` for Twitter accounts), quantity, and markup percentage.
+4. Review the calculated unit price and click **Publish to FunPay**.
+
+The selling price is `supplier price × (1 + markup / 100)`, rounded **up** to the
+nearest cent. For example, `$0.50` with `30%` markup becomes `$0.65`. FunPay fees
+are not included. Both source and FunPay prices must be USD; other currencies
+and categories requiring extra selection fields are rejected rather than guessed.
+The English text is copied into both FunPay language fields.
+
+Publishing uses the FunPay account configured in `configs/_main.cfg`, including
+its user agent and enabled proxy. The browser login is independent of this account.
+No HStore purchase is made, and delivery mappings are not modified. Configure the
+existing delivery plugin through **Lots** before accepting orders on the new listing.
+
+A preview lasts 24 hours. Price and stock are checked again before publishing.
+Publication records in `storage/cache/offer_imports.sqlite3` prevent repeated
+publication of the same HStore product to the same category/account. Preserve this
+file across restarts. If a request times out after submission, check FunPay manually:
+the record remains locked because the offer may already exist. Changing an existing
+listing should be done through FunPay; this importer creates new listings only.
+
+Install/update dependencies with `python -m pip install -r requirements.txt` and
+restart the web admin after deploying. For local development:
+
+```sh
+python -m uvicorn admin.main:app --host 127.0.0.1 --port 7430
+```
+
+Tests use mocked FunPay publication requests and do not create live offers:
+
+```sh
+python -m pip install -r requirements-dev.txt
+python -m unittest discover -s tests -v
+```

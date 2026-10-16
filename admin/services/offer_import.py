@@ -1,0 +1,199 @@
+"""HStore catalog import and FunPay offer creation (no provider purchases)."""
+from __future__ import annotations
+
+import configparser
+import re
+from dataclasses import asdict, dataclass
+from decimal import Decimal, InvalidOperation, ROUND_UP
+from urllib.parse import urlsplit
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from FunPayAPI import Account
+
+import requests
+from bs4 import BeautifulSoup
+
+
+class ImportFailure(ValueError):
+    """A localized error code safe to display in the admin."""
+
+
+@dataclass
+class Product:
+    product_id: int
+    url: str
+    title: str
+    description: str
+    price: str
+    stock: int
+    currency: str = "USD"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def product_url(value: str) -> tuple[int, str]:
+    parts = urlsplit(value.strip())
+    match = re.fullmatch(r"/en/product/([1-9][0-9]*)(?:-[\w-]+)?/?", parts.path)
+    if (parts.scheme != "https" or parts.netloc != "hstora.com" or
+            parts.query or parts.fragment or not match):
+        raise ImportFailure("oi_bad_url")
+    return int(match[1]), f"https://hstora.com{parts.path}"
+
+
+def parse_product(html: str, url: str) -> Product:
+    product_id, url = product_url(url)
+    soup = BeautifulSoup(html, "lxml")
+    title = soup.select_one("h1.product-main-title")
+    description = soup.select_one("#description .product-description")
+    price = soup.select_one("#productPurchasePanel #priceAmount")
+    stock = soup.select_one('#productPurchasePanel [data-live-product-stock]')
+    if not all((title, description, price, stock)):
+        raise ImportFailure("oi_bad_product")
+    price_text = price.get_text(strip=True)
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?\s*\$", price_text):
+        raise ImportFailure("oi_currency")
+    try:
+        stock_text = stock.get("data-stock-value", stock.get_text(strip=True))
+        if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)", stock_text):
+            raise ValueError()
+        amount = int(stock_text.replace(",", ""))
+        if int(stock["data-product-id"]) != product_id or amount < 0:
+            raise ValueError()
+        cost = Decimal(price_text.rstrip("$").strip())
+        if cost <= 0:
+            raise ValueError()
+    except (KeyError, ValueError, InvalidOperation) as exc:
+        raise ImportFailure("oi_bad_product") from exc
+    # Preserve plain-text line breaks; never import executable HTML.
+    for br in description.select("br"):
+        br.replace_with("\n")
+    for block in description.select("p, div, li, h2, h3, h4"):
+        block.insert_before("\n")
+        block.insert_after("\n")
+    text = description.get_text().strip()
+    name = title.get_text(" ", strip=True)
+    if not name or not text:
+        raise ImportFailure("oi_bad_product")
+    return Product(product_id, url, name, text, str(cost), amount)
+
+
+def fetch_product(url: str) -> Product:
+    _, url = product_url(url)
+    try:
+        # Redirects are deliberately disabled: input cannot fetch arbitrary hosts.
+        response = requests.get(url, timeout=(10, 30), allow_redirects=False,
+                                headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
+        if response.status_code != 200:
+            raise ImportFailure("oi_fetch_failed")
+        return parse_product(response.text, url)
+    except requests.RequestException as exc:
+        raise ImportFailure("oi_fetch_failed") from exc
+
+
+def selling_price(cost: str, markup: str) -> str:
+    try:
+        if not re.fullmatch(r"[0-9]{1,6}(?:\.[0-9]{1,2})?", markup):
+            raise ValueError()
+        base, percent = Decimal(cost), Decimal(markup)
+        if (not base.is_finite() or not percent.is_finite() or
+                base <= 0 or percent < 0 or percent > 100000):
+            raise ValueError()
+        return str((base * (1 + percent / 100)).quantize(Decimal("0.01"), rounding=ROUND_UP))
+    except (InvalidOperation, ValueError) as exc:
+        raise ImportFailure("oi_bad_markup") from exc
+
+
+def make_account() -> Account:
+    # Web admin runs in a separate process; do not construct Cardinal's singleton.
+    from FunPayAPI import Account
+    cfg = configparser.ConfigParser(interpolation=None)
+    cfg.read("configs/_main.cfg", encoding="utf-8")
+    key = cfg.get("FunPay", "golden_key", fallback="").strip()
+    if not key:
+        raise ImportFailure("oi_no_account")
+    proxy = {}
+    if cfg.getboolean("Proxy", "enable", fallback=False):
+        from Utils.cardinal_tools import validate_proxy, build_proxy
+        value = cfg.get("Proxy", "proxy", fallback="").strip()
+        if not value:
+            raise ImportFailure("oi_proxy")
+        value = build_proxy(*validate_proxy(value))
+        proxy = {"http": value, "https": value}
+    return Account(key, user_agent=cfg.get("FunPay", "user_agent", fallback=None),
+                   requests_timeout=30, proxy=proxy, locale="en").get()
+
+
+def new_offer_fields(html: str, node: int) -> dict[str, str]:
+    soup = BeautifulSoup(html, "lxml")
+    form = soup.select_one("form.form-offer-editor")
+    if form is None:
+        raise ImportFailure("oi_bad_form")
+    fields = {}
+    for element in form.select("input[name], textarea[name], select[name]"):
+        if element.has_attr("disabled"):
+            continue
+        name = element["name"]
+        kind = element.get("type", "")
+        if kind in ("submit", "button", "file"):
+            continue
+        if kind in ("checkbox", "radio") and not element.has_attr("checked"):
+            continue
+        if element.name == "textarea":
+            fields[name] = element.get_text()
+        elif element.name == "select":
+            option = element.select_one("option[selected]") or element.select_one("option")
+            fields[name] = option.get("value", option.get_text()) if option else ""
+            # Category-specific choices must be made explicitly in FunPay first.
+            if name.startswith("fields["):
+                raise ImportFailure("oi_category_fields")
+        else:
+            fields[name] = element.get("value", "on" if kind == "checkbox" else "")
+    if (fields.get("node_id") != str(node) or fields.get("offer_id") not in ("", "0") or
+            not fields.get("csrf_token") or "fields[summary][en]" not in fields):
+        raise ImportFailure("oi_bad_form")
+    price_input = form.select_one('input[name="price"]')
+    group = price_input.find_parent(class_="form-group") if price_input else None
+    currency = group.select_one(".form-control-feedback") if group else None
+    if currency is None or currency.get_text(strip=True) != "$":
+        raise ImportFailure("oi_currency")
+    return fields
+
+
+def prepare_offer(account: Account, node: int, title: str, description: str,
+                  price: str, quantity: int) -> dict[str, str]:
+    response = account.method("get", f"lots/offerEdit?node={node}", {}, {},
+                              raise_not_200=True, locale="en")
+    fields = new_offer_fields(response.text, node)
+    fields.update({"offer_id": "0", "deleted": "", "active": "on",
+                   "auto_delivery": "", "secrets": "", "amount": str(quantity),
+                   "price": price, "fields[summary][en]": title,
+                   "fields[summary][ru]": title, "fields[desc][en]": description,
+                   "fields[desc][ru]": description, "fields[images]": ""})
+    return fields
+
+
+def submit_offer(account: Account, fields: dict[str, str]) -> dict:
+    # The legacy client retries POSTs on 5xx/read errors. Creation must be sent
+    # exactly once: a lost response must never create a second public listing.
+    account.session.mount("https://", requests.adapters.HTTPAdapter(max_retries=0))
+    response = account.session.post(
+        "https://funpay.com/en/lots/offerSave",
+        headers={"accept": "application/json",
+                 "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                 "x-requested-with": "XMLHttpRequest",
+                 "user-agent": account.user_agent or "Mozilla/5.0"},
+        cookies={"golden_key": account.golden_key, "PHPSESSID": account.phpsessid},
+        data=fields, timeout=account.requests_timeout, proxies=account.proxy or {},
+        allow_redirects=False,
+    )
+    response.raise_for_status()
+    result = response.json()
+    if not isinstance(result, dict):
+        raise ImportFailure("oi_uncertain")
+    if result.get("error") or result.get("errors"):
+        raise ImportFailure("oi_rejected")
+    if result.get("done") is not True and not result.get("url") and not result.get("offer_id"):
+        raise ImportFailure("oi_uncertain")
+    return result
