@@ -139,7 +139,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_pages_require_authentication(self):
         app.dependency_overrides.clear()
-        self.assertEqual(self.client.get('/imports/').status_code, 401)
+        self.assertEqual(self.client.get('/imports/', follow_redirects=False).status_code, 303)
 
     def test_csrf_enforced_before_fetch(self):
         response = self.client.post('/imports/preview', data={'product_url': URL, 'csrf_token': 'bad'})

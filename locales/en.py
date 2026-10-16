@@ -681,3 +681,14 @@ oi_changed = 'Supplier price or available stock changed. Import again to review 
 oi_duplicate = 'This product or title is already listed, or a previous publish needs checking. Check your FunPay offers before proceeding.'
 oi_connection = 'Could not prepare the FunPay listing. Check account credentials, proxy and connectivity.'
 oi_csrf = 'Invalid CSRF token. Reload the import page and try again.'
+
+# Web admin login
+auth_title = 'Sign in · Cardinal Admin'
+auth_signin = 'Sign in'
+auth_hint = 'Use your existing admin username and password.'
+auth_username = 'Username'
+auth_password = 'Password'
+auth_invalid = 'Incorrect username or password.'
+auth_logout = 'Sign out'
+auth_logout_hint = 'Sign out of this admin session?'
+auth_csrf = 'Session form expired or request origin invalid. Reload the page and try again.'

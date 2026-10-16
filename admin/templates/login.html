@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ _('auth_title') }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f3f4f6; color: #172033; font: 16px system-ui, sans-serif; padding: 24px; }
+        main { width: 100%; max-width: 420px; padding: 36px; background: white; border: 1px solid #e2e7ee; border-radius: 16px; box-shadow: 0 12px 40px #1720330d; }
+        .brand { font-size: 14px; font-weight: 700; color: #2563eb; margin: 0 0 24px; }
+        h1 { font-size: 28px; margin: 0 0 12px; }
+        .hint { color: #64748b; line-height: 1.5; margin: 0 0 26px; }
+        label { display: block; font-weight: 600; margin: 18px 0 7px; }
+        input { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 7px; font: inherit; }
+        input:focus { outline: 3px solid #bfdbfe; border-color: #2563eb; }
+        button { width: 100%; margin-top: 26px; padding: 13px; border: 0; border-radius: 7px; background: #2563eb; color: white; font: inherit; font-weight: 600; cursor: pointer; }
+        .error { background: #fef2f2; color: #991b1b; padding: 12px; border-radius: 7px; }
+    </style>
+</head>
+<body>
+<main>
+    <p class="brand">FunPay Cardinal</p>
+    <h1>{{ _('auth_logout') if logout else _('auth_signin') }}</h1>
+    <p class="hint">{{ _('auth_logout_hint') if logout else _('auth_hint') }}</p>
+    {% if error %}<p class="error" role="alert">{{ _('auth_invalid') }}</p>{% endif %}
+    <form action="{{ '/logout' if logout else '/login' }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if not logout %}
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <label for="username">{{ _('auth_username') }}</label>
+        <input id="username" name="username" autocomplete="username" required autofocus maxlength="256">
+        <label for="password">{{ _('auth_password') }}</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+        {% endif %}
+        <button type="submit">{{ _('auth_logout') if logout else _('auth_signin') }}</button>
+    </form>
+</main>
+</body>
+</html>

@@ -3,11 +3,27 @@ from datetime import datetime
 from fastapi import FastAPI, Request, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from admin.auth import get_current_user
-from admin.routes import lots, settings, logs, status, providers, import_offers
+from admin.auth import get_current_user, translate
+from admin.routes import lots, settings, logs, status, providers, import_offers, login
 
 app = FastAPI(title="FunPay Cardinal Admin", version="1.0.0")
 templates = Jinja2Templates(directory="admin/templates")
+
+@app.middleware("http")
+async def protect_admin_requests(request: Request, call_next):
+    from fastapi.responses import JSONResponse
+    request.state.logout_label = translate("auth_logout")
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        expected = str(request.base_url).rstrip("/")
+        if (request.headers.get("sec-fetch-site") == "cross-site" or
+                (origin is not None and origin != expected)):
+            return JSONResponse({"detail": translate("auth_csrf")}, status_code=403)
+    response = await call_next(request)
+    if request.url.path != "/static" and not request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 # Register custom Jinja2 filter: timestamp to string
 def timestamp_to_str(ts):
@@ -23,6 +39,7 @@ if not os.path.exists("admin/static"):
 app.mount("/static", StaticFiles(directory="admin/static"), name="static")
 
 # Include routers
+app.include_router(login.router)
 app.include_router(import_offers.router, prefix="/imports", tags=["imports"], dependencies=[Depends(get_current_user)])
 app.include_router(lots.router, prefix="/lots", tags=["lots"], dependencies=[Depends(get_current_user)])
 app.include_router(settings.router, prefix="/settings", tags=["settings"], dependencies=[Depends(get_current_user)])

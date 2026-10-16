@@ -163,3 +163,22 @@ Tests use mocked FunPay publication requests and do not create live offers:
 python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
+
+## Web admin sign-in
+
+The web admin uses a `/login` page instead of a browser HTTP Basic password popup.
+Keep using the username and password in `configs/admin.cfg`; no credential reset
+or migration is required. Unauthenticated requests redirect to sign-in and return
+to the requested page after successful login. Use **Sign out** in the navigation
+to end a session.
+
+Sessions expire after eight hours, persist across PM2 restarts, and are invalidated
+when the configured username or password changes. Session tokens are stored only
+as hashes in `storage/cache/admin_sessions.sqlite3`. Cookies are HttpOnly and
+SameSite=Strict, and use Secure when the app receives HTTPS requests. If HTTPS is
+terminated by Nginx, configure Uvicorn to trust forwarded headers from that proxy.
+The login form has no external script or stylesheet dependency.
+
+Deploy the updated files and restart `funpay-admin`; `funpay-cardinal` does not
+need restarting for this change. A separately configured Nginx `auth_basic` rule
+can still display its own popup; this change replaces the application's login only.

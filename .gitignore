@@ -1,3 +1,4 @@
 .dyad/
 __pycache__/
 *.py[cod]
+storage/cache/admin_sessions.sqlite3*
