@@ -187,23 +187,23 @@ class WorkflowTests(unittest.TestCase):
         self.account.method.assert_not_called()
         self.account.session.post.assert_not_called()
 
-    def test_description_limit_accepts_850_and_rejects_851(self):
+    def test_description_limit_accepts_817_and_rejects_818(self):
         draft = self.preview()
-        response = self.publish(draft, description='x' * 851)
-        self.assertIn('1–850', response.text)
+        response = self.publish(draft, description='x' * 818)
+        self.assertIn('1–817', response.text)
         self.account.session.post.assert_not_called()
-        response = self.publish(draft, description='x' * 850)
+        response = self.publish(draft, description='x' * 817)
         self.assertIn('Offer published successfully', response.text)
         payload = self.account.session.post.call_args.kwargs['data']
-        self.assertEqual(len(payload['fields[desc][en]']), 850)
-        self.assertEqual(len(payload['fields[desc][ru]']), 850)
+        self.assertEqual(len(payload['fields[desc][en]']), 817)
+        self.assertEqual(len(payload['fields[desc][ru]']), 817)
 
     def test_browser_crlf_submission_at_description_limit(self):
         # Textareas display LF but browsers serialize newlines as CRLF.
-        description = ('Account information\n\n' * 30 + 'x' * 850)[:850]
-        self.assertEqual(len(description), 850)
+        description = ('Account information\n\n' * 30 + 'x' * 817)[:817]
+        self.assertEqual(len(description), 817)
         submitted = description.replace('\n', '\r\n')
-        self.assertGreater(len(submitted), 850)
+        self.assertGreater(len(submitted), 817)
         response = self.publish(self.preview(), description=submitted)
         self.assertIn('Offer published successfully', response.text)
         payload = self.account.session.post.call_args.kwargs['data']
@@ -214,10 +214,10 @@ class WorkflowTests(unittest.TestCase):
         self.product.description = 'x' * 900
         self.preview()
         response = self.client.post('/imports/preview', data={'csrf_token': 'csrf', 'product_url': URL})
-        self.assertIn('maxlength="850"', response.text)
-        self.assertIn('x' * 850 + '</textarea>', response.text)
-        self.assertNotIn('x' * 851, response.text)
-        self.assertIn('shortened to 850', response.text)
+        self.assertIn('maxlength="817"', response.text)
+        self.assertIn('x' * 817 + '</textarea>', response.text)
+        self.assertNotIn('x' * 818, response.text)
+        self.assertIn('shortened to 817', response.text)
 
     def test_price_change_requires_new_preview(self):
         draft = self.preview()

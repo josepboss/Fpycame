@@ -675,7 +675,7 @@ oi_category_fields = 'This category needs extra options. Create this offer direc
 oi_uncertain = 'FunPay may have received the offer. Check your offers before trying again. Automatic retries are blocked to prevent duplicates.'
 oi_rejected = 'FunPay rejected the offer. Check the title, description, quantity and price before retrying.'
 oi_expired = 'Preview expired. Import the product again.'
-oi_invalid = 'Enter a title of 1–100 characters, a description of 1–850 characters and a valid category ID.'
+oi_invalid = 'Enter a title of 1–100 characters, a description of 1–817 characters and a valid category ID.'
 oi_stock = 'Quantity must be at least 1 and no more than supplier stock.'
 oi_changed = 'Supplier price or available stock changed. Import again to review current values.'
 oi_duplicate = 'This product or title is already listed, or a previous publish needs checking. Check your FunPay offers before proceeding.'
@@ -693,8 +693,8 @@ auth_logout = 'Sign out'
 auth_logout_hint = 'Sign out of this admin session?'
 auth_csrf = 'Session form expired or request origin invalid. Reload the page and try again.'
 
-oi_description_trimmed = 'The imported description was shortened to 850 characters. Review and edit it before publishing.'
+oi_description_trimmed = 'The imported description was shortened to 817 characters. Review and edit it before publishing.'
 
-oi_description_length = 'Description must contain 1–850 characters. Shorten it and try again.'
+oi_description_length = 'Description must contain 1–817 characters. Shorten it and try again.'
 
 oi_republish_deleted = 'I deleted the previous offer from FunPay and want to republish it. Import a fresh preview first. This cannot retry an uncertain submission.'
