@@ -206,7 +206,8 @@ can still display its own popup; this change replaces the application's login on
 Every new successful import now saves a durable HStore → FunPay stock mapping in
 `storage/cache/offer_stock.sqlite3`, separate from delivery configuration. Preserve
 this file across deployments. The **Imported Offer Stock Monitor** Cardinal plugin
-checks these products about once a minute. When a successful check returns zero
+checks these products about once a minute using HStore's live `/api/product-stock`
+endpoint (the same inventory feed as the storefront), rather than the initial HTML. When a successful check returns zero
 stock, it fetches the mapped offer, unchecks **Active**, saves, and verifies the
 saved state. Failed supplier checks never count as zero. When stock returns, the monitor reactivates offers it previously paused and caps
 the restored quantity at the available supplier stock. Manually disabled offers
@@ -214,7 +215,8 @@ stay disabled. Pause ownership survives restarts; old mappings without ownership
 information are not automatically reactivated.
 
 The Imports page shows the saved product, FunPay link, last known stock, and monitor
-status. If FunPay's creation response does not include an offer ID, the monitor
+status. The last-check timestamp uses server time; checks older than five minutes
+are marked overdue rather than appearing healthy. If FunPay's creation response does not include an offer ID, the monitor
 resolves a single exact matching title in that account/category before saving the
 permanent ID. Ambiguous matches are left unchanged. The monitor only handles the
 FunPay account used by the running Cardinal process.

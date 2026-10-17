@@ -720,3 +720,6 @@ oi_delivery_restart = 'Offer published and delivery mapping saved, but Cardinal 
 oi_delivery_failed = 'Offer published, but delivery mapping could not be saved. Configure it in Lots before accepting orders; do not publish again.'
 oi_delivery_conflict = 'This title already has an incompatible delivery mapping in Lots. Resolve it before publishing.'
 oi_delivery_view = 'View delivery mappings'
+
+oi_stock_checked = 'Last check (server time)'
+oi_stock_stale = 'Checks overdue: verify Cardinal monitor is running'

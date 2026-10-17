@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from admin.services.offer_import import fetch_product, product_url
+from admin.services.offer_import import fetch_live_stock, product_url
 
 DB_PATH = Path("storage/cache/offer_stock.sqlite3")
 PUBLICATIONS_DB = Path("storage/cache/offer_imports.sqlite3")
@@ -95,8 +95,8 @@ def check_stock(account) -> None:
         identity = (mapping["account"], mapping["node"], mapping["product"])
         try:
             if mapping["source_url"] not in cache:
-                cache[mapping["source_url"]] = fetch_product(mapping["source_url"])
-            product = cache[mapping["source_url"]]
+                cache[mapping["source_url"]] = fetch_live_stock(mapping["product"])
+            stock = cache[mapping["source_url"]]
             offer_id = mapping["offer_id"]
             if not offer_id:
                 # Resolve once by exact title in the specified account/category.
@@ -107,12 +107,12 @@ def check_stock(account) -> None:
                 offer_id = int(matches[0].id)
             state = "monitoring"
             auto_paused = mapping["auto_paused"]
-            if product.stock == 0 or auto_paused:
+            if stock == 0 or auto_paused:
                 fields = account.get_lot_fields(offer_id)
                 if (int(fields.lot_id) != offer_id or
                         str(fields.fields.get("node_id")) != str(mapping["node"])):
                     raise ValueError("Offer category mismatch")
-                if product.stock == 0 and fields.fields.get("active") == "on":
+                if stock == 0 and fields.fields.get("active") == "on":
                     # Persist ownership before saving: a lost response must not
                     # lose the information needed to resume after restocking.
                     with database() as db:
@@ -126,12 +126,12 @@ def check_stock(account) -> None:
                         raise ValueError("Deactivation not confirmed")
                     logger.info("Deactivated FunPay offer %s: HStore product %s is out of stock.",
                                 offer_id, mapping["product"])
-                if product.stock == 0:
+                if stock == 0:
                     state = "inactive"
                 elif auto_paused:
                     if fields.fields.get("active") != "on":
                         fields.active = True
-                        fields.amount = max(1, min(getattr(fields, "amount", None) or product.stock, product.stock))
+                        fields.amount = max(1, min(getattr(fields, "amount", None) or stock, stock))
                         account.save_lot(fields, locale="en")
                         saved = account.get_lot_fields(offer_id)
                         if saved.fields.get("active") != "on":
@@ -142,7 +142,7 @@ def check_stock(account) -> None:
             with database() as db:
                 db.execute("""UPDATE mappings SET offer_id=?,last_stock=?,checked=?,state=?,last_error='',auto_paused=?
                     WHERE account=? AND node=? AND product=?""",
-                    (offer_id, product.stock, time.time(), state, auto_paused, *identity))
+                    (offer_id, stock, time.time(), state, auto_paused, *identity))
         except Exception as exc:
             # No exception payloads or credentials in the dashboard/logs.
             logger.warning("Stock check failed for product %s (%s).", mapping["product"], type(exc).__name__)

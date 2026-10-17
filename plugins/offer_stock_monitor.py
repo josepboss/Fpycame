@@ -33,6 +33,9 @@ def start_monitor(cardinal: Cardinal) -> None:
             if plugin is not None and plugin.enabled:
                 try:
                     migrate_publications(cardinal.account.id)
+                except Exception as exc:
+                    logger.warning("Stock mapping migration failed (%s).", type(exc).__name__)
+                try:
                     check_stock(cardinal.account)
                 except Exception as exc:
                     logger.warning("Stock monitor cycle failed (%s).", type(exc).__name__)

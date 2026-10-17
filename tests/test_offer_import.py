@@ -11,7 +11,7 @@ from admin.auth import get_current_user
 from admin.routes import import_offers as routes
 from admin.services.offer_import import (
     ImportFailure, Product, fetch_product, new_offer_fields, parse_product,
-    product_url, selling_price, submit_offer, rejection_details,
+    product_url, selling_price, submit_offer, rejection_details, fetch_live_stock,
 )
 
 URL = 'https://hstora.com/en/product/1358-twitter-2006-2018-microsoft-email-auth-token-2fa'
@@ -40,6 +40,32 @@ class ProductTests(unittest.TestCase):
     def test_initial_html_stock_without_javascript_attribute(self):
         product = parse_product(HTML.replace(' data-stock-value="2126"', ''), URL)
         self.assertEqual(product.stock, 2126)
+
+    def test_sold_out_html_parses_as_zero(self):
+        html = HTML.replace(' data-stock-value="2126"', '').replace('2,126', 'Out of Stock')
+        self.assertEqual(parse_product(html, URL).stock,0)
+
+    @patch('admin.services.offer_import.requests.get')
+    def test_live_stock_zero_uses_storefront_endpoint(self, get):
+        get.return_value.status_code=200
+        get.return_value.json.return_value={'success':True,'stocks':{'1783':{'stock_quantity':0,'status':'active'}}}
+        self.assertEqual(fetch_live_stock(1783),0)
+        self.assertEqual(get.call_args.args[0],'https://hstora.com/api/product-stock')
+        self.assertEqual(get.call_args.kwargs['params'],{'ids':'1783'})
+        self.assertFalse(get.call_args.kwargs['allow_redirects'])
+
+    @patch('admin.services.offer_import.requests.get')
+    def test_bad_live_stock_never_becomes_zero(self,get):
+        get.return_value.status_code=200
+        payloads=[{'success':False}, {'success':True,'stocks':{}},
+                  {'success':True,'stocks':{'1783':{'stock_quantity':None}}},
+                  {'success':True,'stocks':{'1783':{'stock_quantity':False}}},
+                  {'success':True,'stocks':{'1783':{'stock_quantity':-1}}}]
+        for payload in payloads:
+            get.return_value.json.return_value=payload
+            with self.subTest(payload=payload),self.assertRaises(ImportFailure):fetch_live_stock(1783)
+        get.return_value.status_code=503
+        with self.assertRaises(ImportFailure):fetch_live_stock(1783)
 
     def test_url_restrictions(self):
         for url in ['http://hstora.com/en/product/1358', 'https://hstora.com.evil/en/product/1358',

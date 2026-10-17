@@ -59,10 +59,14 @@ def parse_product(html: str, url: str) -> Product:
     if not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?\s*\$", price_text):
         raise ImportFailure("oi_currency")
     try:
-        stock_text = stock.get("data-stock-value", stock.get_text(strip=True))
-        if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)", stock_text):
-            raise ValueError()
-        amount = int(stock_text.replace(",", ""))
+        stock_text = stock.get("data-stock-value", stock.get_text(" ", strip=True))
+        stock_text = re.sub(r"\s+", " ", stock_text).strip()
+        if stock_text.casefold() == "out of stock":
+            amount = 0
+        else:
+            if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)", stock_text):
+                raise ValueError()
+            amount = int(stock_text.replace(",", ""))
         if int(stock["data-product-id"]) != product_id or amount < 0:
             raise ValueError()
         cost = Decimal(price_text.rstrip("$").strip())
@@ -94,6 +98,25 @@ def fetch_product(url: str) -> Product:
         return parse_product(response.text, url)
     except requests.RequestException as exc:
         raise ImportFailure("oi_fetch_failed") from exc
+
+
+def fetch_live_stock(product_id: int) -> int:
+    """Read the same live inventory endpoint used by HStore's storefront."""
+    try:
+        response = requests.get('https://hstora.com/api/product-stock',
+            params={'ids': str(product_id)}, timeout=(10, 30), allow_redirects=False,
+            headers={'User-Agent':'Mozilla/5.0', 'Accept':'application/json', 'Cache-Control':'no-cache'})
+        if response.status_code != 200:
+            raise ImportFailure('oi_fetch_failed')
+        payload = response.json()
+        if not isinstance(payload, dict) or payload.get('success') is not True:
+            raise ImportFailure('oi_bad_product')
+        value = payload['stocks'][str(product_id)]['stock_quantity']
+        if isinstance(value, bool) or not isinstance(value, (str, int)) or not str(value).isdigit():
+            raise ImportFailure('oi_bad_product')
+        return int(value)
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        raise ImportFailure('oi_fetch_failed') from exc
 
 
 def selling_price(cost: str, markup: str) -> str:

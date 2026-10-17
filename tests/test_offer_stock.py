@@ -24,7 +24,7 @@ class StockMonitorTests(unittest.TestCase):
             self.addCleanup(p.stop)
         self.account = Mock(id=123)
         self.product = Product(1358, URL, 'Twitter', 'Description', '0.50', 0)
-        self.fetch = patch.object(stock, 'fetch_product', return_value=self.product)
+        self.fetch = patch.object(stock, 'fetch_live_stock', side_effect=lambda _: self.product.stock)
         self.fetch_mock = self.fetch.start()
         self.addCleanup(self.fetch.stop)
         self.fields = SimpleNamespace(lot_id=79665384, fields={'node_id':'1259','active':'on'}, active=True)
@@ -39,6 +39,19 @@ class StockMonitorTests(unittest.TestCase):
         self.assertEqual(self.account.get_lot_fields.call_args.args[0], 79665384)
         row = stock.mappings(123)[0]
         self.assertEqual((row['last_stock'],row['state']), (0,'inactive'))
+
+    def test_real_zero_stock_response_deactivates_offer_79779578(self):
+        from admin.services.offer_import import fetch_live_stock
+        stock.save_mapping(123,1259,{'product_id':1783,'url':'https://hstora.com/en/product/1783-twitter-x-accounts'},'Sold out',79779578)
+        with stock.database() as db:db.execute('DELETE FROM mappings WHERE product=1358')
+        self.fields.lot_id=79779578
+        with patch.object(stock,'fetch_live_stock',wraps=fetch_live_stock), patch('admin.services.offer_import.requests.get') as get:
+            get.return_value.status_code=200
+            get.return_value.json.return_value={'success':True,'stocks':{'1783':{'stock_quantity':0,'status':'active'}}}
+            stock.check_stock(self.account)
+        self.account.save_lot.assert_called_once()
+        self.assertFalse(self.fields.active)
+        self.assertEqual(stock.mappings(123)[0]['state'],'inactive')
 
     def test_positive_stock_does_not_change_offer(self):
         self.product.stock = 12

@@ -51,7 +51,10 @@ def render(request: Request, **context) -> Response:
     cfg.read("configs/_main.cfg", encoding="utf-8")
     lang = cfg.get("Other", "language", fallback="en")
     localizer = Localizer()
-    context.update(request=request, csrf_token=get_csrf_token(), stock_mappings=offer_stock.mappings(),
+    stock_mappings = offer_stock.mappings()
+    for mapping in stock_mappings:
+        mapping['stale'] = mapping['checked'] is not None and time.time() - mapping['checked'] > 300
+    context.update(request=request, csrf_token=get_csrf_token(), stock_mappings=stock_mappings,
                    _=lambda key: localizer.translate(key, language=lang))
     return templates.TemplateResponse(request=request, name="import_offers.html", context=context)
 
