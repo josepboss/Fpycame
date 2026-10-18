@@ -723,3 +723,8 @@ oi_delivery_view = 'View delivery mappings'
 
 oi_stock_checked = 'Last check (server time)'
 oi_stock_stale = 'Checks overdue: verify Cardinal monitor is running'
+
+# Lossless delivery of long credentials
+delivery_chunk_instructions = 'Long credentials follow in numbered parts. For each product, copy only the content between the outer [ ] on each part line and join it in order, adding no spaces or newlines. Keep any brackets inside the content.'
+delivery_chunk_product = 'Product {}'
+delivery_chunk_part = 'Part {}/{}:'

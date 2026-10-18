@@ -16,6 +16,7 @@ from FunPayAPI.updater.events import *
 
 from tg_bot import utils, keyboards
 from Utils import cardinal_tools
+from Utils.delivery_tools import format_products
 from locales.localizer import Localizer
 from threading import Thread
 import configparser
@@ -595,12 +596,16 @@ def deliver_goods(c: Cardinal, e: NewOrderEvent, *args):
     delivery_text = cardinal_tools.format_order_text(cfg_obj["response"], e.order)
 
     amount, goods_left, products = 1, -1, []
+    chunked = False
     try:
         if file_name := cfg_obj.get("productsFileName"):
             if c.multidelivery_enabled and not cfg_obj.getboolean("disableMultiDelivery"):
                 amount = e.order.amount if e.order.amount else 1
             products, goods_left = cardinal_tools.get_products(f"storage/products/{file_name}", amount)
-            delivery_text = delivery_text.replace("$product", "\n".join(products).replace("\\n", "\n"))
+            product_text, chunked = format_products(products, _)
+            if not chunked:
+                product_text = product_text.replace("\\n", "\n")
+            delivery_text = delivery_text.replace("$product", product_text)
     except Exception as exc:
         logger.error(
             f"Произошла ошибка при получении товаров для заказа $YELLOW{e.order.id}: {str(exc)}$RESET")  # locale
@@ -610,7 +615,10 @@ def deliver_goods(c: Cardinal, e: NewOrderEvent, *args):
                 f"Произошла ошибка при получении товаров для заказа {e.order.id}: {str(exc)}")  # locale
         return
 
-    result = c.send_message(chat_id, delivery_text, e.order.buyer_username)
+    if chunked:
+        result = c.send_message(chat_id, delivery_text, e.order.buyer_username, literal=True)
+    else:
+        result = c.send_message(chat_id, delivery_text, e.order.buyer_username)
     if not result:
         logger.error(f"Не удалось отправить товар для ордера $YELLOW{e.order.id}$RESET.")  # locale
         setattr(e, "error", 1)

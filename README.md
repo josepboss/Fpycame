@@ -236,3 +236,18 @@ pm2 restart funpay-admin funpay-cardinal
 
 Ensure **Imported Offer Stock Monitor** is enabled in Cardinal's plugins. Monitor
 failures appear in the Cardinal logs under `FPC.offer_stock`.
+
+## Long credential delivery
+
+HStore records are now saved intact: long refresh tokens and other fields are never
+removed. If a product contains an uninterrupted word longer than 80 characters,
+delivery formats the complete record into numbered, bracketed chunks of at most
+64 characters. Buyers join the content inside the outer brackets in order, without
+adding spaces or newlines. Short product records keep their existing format.
+
+Chunked delivery uses plain-text mode, so strings resembling `$photo` or `$sleep`
+inside credentials are not interpreted as commands. Messages still follow Cardinal's
+20-line splitting. Raw HStore credentials are no longer written to the plugin log.
+Previously shortened stock records are not repaired by this change; recover the
+original purchased record from HStore before retrying an affected order. Do not
+purchase another account merely to retry delivery.

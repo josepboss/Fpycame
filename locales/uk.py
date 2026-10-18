@@ -82,3 +82,8 @@ oi_delivery_view = 'Відкрити зв’язки видачі'
 
 oi_stock_checked = 'Остання перевірка (час сервера)'
 oi_stock_stale = 'Перевірки прострочено: перевірте роботу монітора Cardinal'
+
+# Lossless delivery of long credentials
+delivery_chunk_instructions = 'Довгі дані розбито на частини. Для кожного товару скопіюйте вміст між зовнішніми [ ] та з’єднайте частини за порядком без додавання пробілів чи переносів рядків. Внутрішні дужки збережіть.'
+delivery_chunk_product = 'Товар {}'
+delivery_chunk_part = 'Частина {}/{}:'

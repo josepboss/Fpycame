@@ -448,7 +448,7 @@ class Cardinal(object):
 
     def send_message(self, chat_id: int | str, message_text: str, chat_name: str | None = None,
                      interlocutor_id: int | None = None, attempts: int = 3,
-                     watermark: bool = True) -> list[FunPayAPI.types.Message] | None:
+                     watermark: bool = True, literal: bool = False) -> list[FunPayAPI.types.Message] | None:
         """
         Отправляет сообщение в чат FunPay.
 
@@ -457,6 +457,7 @@ class Cardinal(object):
         :param chat_name: название чата (необязательно).
         :param interlocutor_id: ID собеседника (необязательно).
         :param attempts: кол-во попыток на отправку сообщения.
+        :param literal: send plain text without interpreting $photo/$sleep directives.
         :param watermark: добавлять ли водяной знак в начало сообщения?
 
         :return: объект сообщения / последнего сообщения, если оно доставлено, иначе - None
@@ -464,7 +465,7 @@ class Cardinal(object):
         if self.MAIN_CFG["Other"].get("watermark") and watermark and not message_text.strip().startswith("$photo="):
             message_text = f"{self.MAIN_CFG['Other']['watermark']}\n" + message_text
 
-        entities = self.parse_message_entities(message_text)
+        entities = self.split_text(message_text) if literal else self.parse_message_entities(message_text)
         if all(isinstance(i, float) for i in entities) or not entities:
             return
 

@@ -150,7 +150,7 @@ def handle_hstore(crd: Cardinal, event: NewOrderEvent) -> bool:
         try:
             data = resp.json()
             items = data.get("data", {}).get("delivery", {}).get("items", [])
-            logger.info(f"[API Delivery] HStore raw items: {items}")
+            logger.info("[API Delivery] HStore returned %s product record(s).", len(items))
             if items:
                 ad_cfg = crd.AD_CFG
                 if lot_name in ad_cfg:
@@ -158,21 +158,8 @@ def handle_hstore(crd: Cardinal, event: NewOrderEvent) -> bool:
                     if stock_file:
                         file_path = f"storage/products/{stock_file}"
                         with open(file_path, "w", encoding="utf-8") as f:
-                            # FunPay rejects messages with words longer than ~100 chars
-                            # Split long tokens with a space to avoid the restriction
-                            safe_items = []
-                            for item in items:
-                                # Remove any field longer than 80 chars
-                                parts = item.split("|")
-                                cleaned_pipes = []
-                                for pipe_part in parts:
-                                    colon_parts = pipe_part.split(":")
-                                    cleaned_colons = [p for p in colon_parts if len(p) <= 80]
-                                    if cleaned_colons:
-                                        cleaned_pipes.append(":".join(cleaned_colons))
-                                cleaned_item = "|".join(cleaned_pipes)
-                                safe_items.append(cleaned_item)
-                            f.write("\n".join(safe_items) + "\n")
+                            # Never discard or shorten authentication fields.
+                            f.write("\n".join(items) + "\n")
                         logger.info(f"[API Delivery] HStore: wrote {len(items)} items to {stock_file}")
                         return True
         except (json.JSONDecodeError, KeyError) as e:
