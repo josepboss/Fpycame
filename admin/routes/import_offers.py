@@ -14,7 +14,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from admin.templating import templates
-from fastapi.responses import Response
+from fastapi.responses import Response, RedirectResponse
 
 from admin.auth import get_csrf_token, validate_csrf_token
 from admin.services.offer_import import (ImportFailure, fetch_product, make_account,
@@ -65,8 +65,8 @@ def csrf(token: str) -> None:
 
 
 @router.get("/")
-def import_page(request: Request) -> Response:
-    return render(request)
+def import_page(request: Request, markup_saved: bool = False) -> Response:
+    return render(request, markup_saved=markup_saved)
 
 
 @router.post("/preview")
@@ -198,3 +198,19 @@ def track_offer(request: Request, product_url: str = Form(...), offer_url: str =
         return render(request, error="oi_bad_mapping")
     except Exception:
         return render(request, error="oi_connection")
+
+
+@router.post('/markup')
+def update_markup(request: Request, account_id: int = Form(...), node: int = Form(...),
+                  product_id: int = Form(...), markup: str = Form(...), csrf_token: str = Form('')) -> Response:
+    csrf(csrf_token)
+    try:
+        selling_price('1',markup)
+    except ImportFailure:
+        return render(request,error='oi_bad_markup')
+    with offer_stock.database() as db:
+        result=db.execute("""UPDATE mappings SET markup=?,markup_confirmed=1,price_sync_pending=1
+            WHERE account=? AND node=? AND product=?""",(markup,account_id,node,product_id))
+        if result.rowcount != 1:
+            raise HTTPException(status_code=404,detail='Mapping not found')
+    return RedirectResponse('/imports/?markup_saved=true',status_code=303)

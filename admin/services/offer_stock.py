@@ -37,6 +37,9 @@ def database() -> Iterator[sqlite3.Connection]:
             for name in ('supplier_title', 'supplier_price', 'markup'):
                 if name not in columns:
                     db.execute(f'ALTER TABLE mappings ADD COLUMN {name} TEXT')
+            for name in ('markup_confirmed', 'price_sync_pending'):
+                if name not in columns:
+                    db.execute(f'ALTER TABLE mappings ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0')
             yield db
     finally:
         db.close()
@@ -67,10 +70,10 @@ def save_mapping(account: int, node: int, product: dict, title: str,
         raise ValueError("Product identity mismatch")
     with database() as db:
         conflict = """DO UPDATE SET source_url=excluded.source_url, title=excluded.title,
-            offer_id=excluded.offer_id, state='pending', last_error='', checked=NULL, auto_paused=0, supplier_title=excluded.supplier_title, supplier_price=excluded.supplier_price, markup=excluded.markup""" if replace else "DO NOTHING"
-        db.execute(f"""INSERT INTO mappings(account,node,product,source_url,title,offer_id,supplier_title,supplier_price,markup)
-            VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(account,node,product) {conflict}""",
-            (account, node, product_id, url, title, offer_id, product.get("title",title),product.get("price"),markup))
+            offer_id=excluded.offer_id, state='pending', last_error='', checked=NULL, auto_paused=0, supplier_title=excluded.supplier_title, supplier_price=excluded.supplier_price, markup=excluded.markup, markup_confirmed=excluded.markup_confirmed, price_sync_pending=0""" if replace else "DO NOTHING"
+        db.execute(f"""INSERT INTO mappings(account,node,product,source_url,title,offer_id,supplier_title,supplier_price,markup,markup_confirmed)
+            VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account,node,product) {conflict}""",
+            (account, node, product_id, url, title, offer_id, product.get("title",title),product.get("price"),markup,int(markup is not None)))
 
 
 def mappings(account: int | None = None) -> list[dict]:
@@ -149,7 +152,7 @@ def check_stock(account) -> None:
                                     offer_id, mapping["product"])
                     auto_paused = 0
             with database() as db:
-                db.execute("""UPDATE mappings SET offer_id=?,last_stock=?,checked=?,state=?,last_error='',auto_paused=?
+                db.execute("""UPDATE mappings SET offer_id=?,last_stock=?,checked=?,state=?,last_error=CASE WHEN last_error LIKE 'Metadata:%' THEN last_error ELSE '' END,auto_paused=?
                     WHERE account=? AND node=? AND product=?""",
                     (offer_id, stock, time.time(), state, auto_paused, *identity))
         except Exception as exc:
@@ -170,49 +173,48 @@ def sync_metadata(account, cardinal=None) -> None:
             product=fetch_product(mapping['source_url'])
             if product.product_id != mapping['product']:
                 raise ValueError('Supplier product mismatch')
+            target_title=product.title[:100].rstrip()
             title_changed=product.title != (mapping['supplier_title'] or mapping['title'])
-            price_changed=mapping['supplier_price'] is not None and Decimal(product.price) != Decimal(mapping['supplier_price'])
-            if title_changed and (len(product.title)>100 or not product.title.strip() or '\n' in product.title or '\r' in product.title):
+            price_changed=bool(mapping['price_sync_pending']) or (mapping['supplier_price'] is not None and Decimal(product.price) != Decimal(mapping['supplier_price']))
+            if title_changed and (not target_title or '\n' in product.title or '\r' in product.title):
                 raise ValueError('Supplier title is not a valid FunPay title')
-            markup=mapping['markup']
+            markup=mapping['markup'] if mapping['markup_confirmed'] else None
             fields=None
-            if title_changed or price_changed or markup is None:
+            if title_changed or (price_changed and markup is not None):
                 fields=account.get_lot_fields(mapping['offer_id'])
                 if int(fields.lot_id)!=mapping['offer_id'] or str(fields.fields.get('node_id'))!=str(mapping['node']):
                     raise ValueError('Offer identity mismatch')
-                if markup is None and mapping['supplier_price']:
-                    markup=str(((Decimal(str(fields.price))/Decimal(mapping['supplier_price'])-1)*100).quantize(Decimal('0.01')))
             changed=False
             if title_changed:
                 existing=account.get_my_subcategory_lots(mapping['node'],locale='en')
-                if any(lot.description==product.title and int(lot.id)!=mapping['offer_id'] for lot in existing):
+                if any(lot.description==target_title and int(lot.id)!=mapping['offer_id'] for lot in existing):
                     raise ValueError('New title conflicts with another FunPay offer')
-                alias_delivery_mapping(mapping['title'],product.title,mapping['product'])
+                alias_delivery_mapping(mapping['title'],target_title,mapping['product'])
                 if cardinal is not None:
                     from Utils.config_loader import load_auto_delivery_config
                     from admin.services.delivery_mapping import AUTO_CFG
                     cardinal.AD_CFG=load_auto_delivery_config(str(AUTO_CFG))
-                fields.title_en=product.title
-                fields.title_ru=product.title
+                fields.title_en=target_title
+                fields.title_ru=target_title
                 changed=True
             target_price=None
-            if price_changed:
-                if markup is None:
-                    raise ValueError('Missing markup baseline')
+            if price_changed and markup is not None:
                 target_price=selling_price(product.price,markup)
                 fields.price=float(target_price)
                 changed=True
             if changed:
                 account.save_lot(fields,locale='en')
                 saved=account.get_lot_fields(mapping['offer_id'])
-                if title_changed and (saved.title_en!=product.title or saved.title_ru!=product.title):
+                if title_changed and (saved.title_en!=target_title or saved.title_ru!=target_title):
                     raise ValueError('Title update not confirmed')
                 if target_price and Decimal(str(saved.price))!=Decimal(target_price):
                     raise ValueError('Price update not confirmed')
             with database() as db:
-                db.execute("""UPDATE mappings SET title=?,supplier_title=?,supplier_price=?,markup=?,source_url=?
+                db.execute("""UPDATE mappings SET title=?,supplier_title=?,supplier_price=?,source_url=?,
+                    price_sync_pending=CASE WHEN markup IS ? AND markup_confirmed=? THEN 0 ELSE price_sync_pending END,
+                    last_error=CASE WHEN last_error LIKE 'Metadata:%' THEN '' ELSE last_error END
                     WHERE account=? AND node=? AND product=?""",
-                    (product.title if title_changed else mapping['title'],product.title,product.price,markup,product.url,*identity))
+                    (target_title if title_changed else mapping['title'],product.title,product.price,product.url,mapping['markup'],mapping['markup_confirmed'],*identity))
         except Exception as exc:
             logger.warning('Offer metadata sync failed for product %s (%s).',mapping['product'],type(exc).__name__)
             with database() as db:

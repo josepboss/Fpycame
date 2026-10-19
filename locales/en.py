@@ -730,3 +730,9 @@ delivery_chunk_product = 'Product {}'
 delivery_chunk_part = 'Part {}/{}:'
 
 oi_supplier_price = 'Last supplier unit price'
+
+oi_markup_save = 'Save %'
+
+oi_markup_required = 'Set your markup to enable price updates.'
+
+oi_markup_saved = 'Markup saved. The monitor will apply it on the next successful check.'

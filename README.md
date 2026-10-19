@@ -257,19 +257,23 @@ purchase another account merely to retry delivery.
 The Cardinal monitor also checks the supplier product title and unit price. Mappings
 keep their HStore product ID and FunPay offer ID, even when the title/URL slug changes.
 New imports save the selected markup, and supplier price changes recalculate the
-FunPay unit price using that same markup and cent rounding. Existing mappings infer
-markup from the current seller price and saved supplier-price snapshot when possible;
-without a reliable baseline, a price change is reported as a sync error.
+FunPay unit price using that same markup and cent rounding. Older mappings require an explicitly confirmed markup in the Imports table.
+Previously inferred percentages are not displayed or used for automatic pricing.
+Until a markup is confirmed, existing FunPay prices remain unchanged while title
+and stock monitoring continue. Use the per-offer **Save %** form to choose the markup;
+the next successful monitor cycle applies it, even if the supplier price has not changed.
 
 When the supplier title changes, the monitor prepares the matching API/auto-delivery
 configuration under the new title and reloads Cardinal's delivery configuration
-before updating and verifying the FunPay title. The old title is retained as an alias
+before updating and verifying the FunPay title. Supplier titles longer than 100
+characters are shortened to fit FunPay, while the complete supplier title remains
+saved as the change-tracking baseline. The old title is retained as an alias
 for pending orders, sharing the original stock file and delivery response. Removing
 one alias from Lots preserves the stock file while another mapping still uses it.
 Conflicting titles/mappings and failed updates are reported rather than overwriting
 unrelated offers. Descriptions and manual activation choices are preserved.
 
-The Imports table shows the last supplier price and saved/inferred markup. Updates
+The Imports table shows the last supplier price and an editable, explicitly confirmed markup. Updates
 run in the existing monitor cycle; deploy and restart both `funpay-admin` and
 `funpay-cardinal` to enable them. Product redirects are only followed within
 `https://hstora.com/en/product/` and must retain the same product ID.

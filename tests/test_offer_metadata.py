@@ -79,11 +79,57 @@ class MetadataTests(unittest.TestCase):
         api,auto=delivery.read_configs()
         self.assertIn('Old title',api);self.assertIn('New title',api)
 
-    def test_legacy_markup_is_inferred_from_previous_supplier_price(self):
-        with stock.database() as db:db.execute('UPDATE mappings SET markup=NULL')
+    def test_legacy_markup_is_not_guessed_and_price_stays_unchanged(self):
+        with stock.database() as db:db.execute('UPDATE mappings SET markup_confirmed=0,markup="111.63"')
         stock.sync_metadata(self.account)
-        self.assertEqual(self.fields.price,0.78)
-        self.assertEqual(stock.mappings(123)[0]['markup'],'30.00')
+        self.assertEqual(self.fields.price,0.65)
+        self.assertEqual(self.fields.title_en,'New title')
+        self.assertEqual(stock.mappings(123)[0]['markup_confirmed'],0)
+
+    def test_supplier_title_over_100_is_shortened_without_losing_baseline(self):
+        self.current.title='Twitter (X) Accounts 2006-2020 | Phone Verified (maybe not) | Hotmail Access | 2FA | Auth Token | 0-20 Followers'
+        self.assertEqual(len(self.current.title),112)
+        with stock.database() as db:db.execute("UPDATE mappings SET last_error='Metadata:ValueError'")
+        stock.sync_metadata(self.account)
+        self.assertLessEqual(len(self.fields.title_en),100)
+        self.assertEqual(self.fields.title_en,self.current.title[:100].rstrip())
+        api,auto=delivery.read_configs()
+        self.assertIn(self.fields.title_en,api)
+        row=stock.mappings(123)[0]
+        self.assertEqual(row['supplier_title'],self.current.title)
+        self.assertEqual(row['last_error'],'')
+        self.account.reset_mock()
+        stock.sync_metadata(self.account)
+        self.account.save_lot.assert_not_called()
+
+    def test_confirmed_markup_applies_on_next_check_without_supplier_price_change(self):
+        from fastapi.testclient import TestClient
+        from admin.main import app
+        from admin.auth import get_current_user
+        self.current.title='Old title';self.current.price='0.50'
+        app.dependency_overrides[get_current_user]=lambda:'admin'
+        self.addCleanup(app.dependency_overrides.clear)
+        client=TestClient(app,follow_redirects=False)
+        with patch('admin.routes.import_offers.validate_csrf_token',return_value=True):
+            response=client.post('/imports/markup',data={'account_id':123,'node':1259,'product_id':1358,'markup':'100','csrf_token':'test'})
+        self.assertEqual(response.status_code,303)
+        self.assertEqual(stock.mappings(123)[0]['price_sync_pending'],1)
+        stock.sync_metadata(self.account)
+        self.assertEqual(self.fields.price,1.0)
+        row=stock.mappings(123)[0]
+        self.assertEqual(row['markup'],'100')
+        self.assertEqual(row['price_sync_pending'],0)
+        self.assertEqual(row['markup_confirmed'],1)
+
+    def test_markup_edit_requires_csrf(self):
+        from fastapi.testclient import TestClient
+        from admin.main import app
+        from admin.auth import get_current_user
+        app.dependency_overrides[get_current_user]=lambda:'admin'
+        self.addCleanup(app.dependency_overrides.clear)
+        response=TestClient(app).post('/imports/markup',data={'account_id':123,'node':1259,'product_id':1358,'markup':'100','csrf_token':''})
+        self.assertEqual(response.status_code,403)
+        self.assertEqual(stock.mappings(123)[0]['markup'],'30')
 
     def test_refreshes_running_cardinal_config_before_remote_save(self):
         cardinal=SimpleNamespace(AD_CFG=None)

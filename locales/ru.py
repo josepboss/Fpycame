@@ -89,3 +89,9 @@ delivery_chunk_product = 'Товар {}'
 delivery_chunk_part = 'Часть {}/{}:'
 
 oi_supplier_price = 'Последняя цена поставщика'
+
+oi_markup_save = 'Сохранить %'
+
+oi_markup_required = 'Укажите наценку для обновления цены.'
+
+oi_markup_saved = 'Наценка сохранена. Монитор применит её при следующей успешной проверке.'

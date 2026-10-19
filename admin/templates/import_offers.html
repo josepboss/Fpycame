@@ -3,6 +3,7 @@
 <h1 class="text-2xl font-bold mb-2">{{ _('oi_heading') }}</h1>
 <p class="text-gray-600 mb-6">{{ _('oi_intro') }}</p>
 {% if error %}<div role="alert" class="border border-red-300 bg-red-50 text-red-800 p-4 rounded mb-6">{{ _(error) }}{% if error_detail %}<p class="mt-2 whitespace-pre-line">{{ error_detail }}</p>{% endif %}</div>{% endif %}
+{% if markup_saved %}<p role="status" class="bg-green-50 p-4 mb-6">{{ _('oi_markup_saved') }}</p>{% endif %}
 {% if mapping_saved %}<p role="status" class="bg-green-50 p-4 mb-6">{{ _('oi_mapping_saved') }}</p>{% endif %}
 {% if success %}
 <div role="status" class="bg-green-50 border border-green-300 p-4 rounded mb-6">
@@ -105,7 +106,14 @@ document.getElementById('publishForm').addEventListener('submit', () => {
             <td class="p-2">{{ _('oi_stock_error') if mapping.last_error else (_('oi_stock_stale') if mapping.stale else _('oi_stock_' + mapping.state)) }}</td>
             <td class="p-2">{{ mapping.checked|timestamp_to_str if mapping.checked else '—' }}</td>
             <td class="p-2">{{ ('$' + mapping.supplier_price) if mapping.supplier_price else '—' }}</td>
-            <td class="p-2">{{ (mapping.markup + '%') if mapping.markup is not none else '—' }}</td>
+            <td class="p-2"><form action="/imports/markup" method="post" class="flex gap-2 items-center">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="account_id" value="{{ mapping.account }}">
+                <input type="hidden" name="node" value="{{ mapping.node }}">
+                <input type="hidden" name="product_id" value="{{ mapping.product }}">
+                <input aria-label="{{ _('oi_markup') }}" type="number" name="markup" required min="0" max="100000" step="0.01" value="{{ mapping.markup if mapping.markup_confirmed else '' }}" class="border rounded p-1 w-24">
+                <button class="text-blue-700 underline">{{ _('oi_markup_save') }}</button>
+            </form>{% if not mapping.markup_confirmed %}<span class="text-sm text-amber-700">{{ _('oi_markup_required') }}</span>{% endif %}</td>
         </tr>{% endfor %}</tbody>
     </table></div>
 </section>
