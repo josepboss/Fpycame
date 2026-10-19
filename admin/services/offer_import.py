@@ -5,7 +5,7 @@ import configparser
 import re
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation, ROUND_UP
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urljoin
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -88,14 +88,24 @@ def parse_product(html: str, url: str) -> Product:
 
 
 def fetch_product(url: str) -> Product:
-    _, url = product_url(url)
+    expected_id, url = product_url(url)
     try:
-        # Redirects are deliberately disabled: input cannot fetch arbitrary hosts.
-        response = requests.get(url, timeout=(10, 30), allow_redirects=False,
-                                headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
-        if response.status_code != 200:
-            raise ImportFailure("oi_fetch_failed")
-        return parse_product(response.text, url)
+        for _ in range(4):
+            response = requests.get(url, timeout=(10, 30), allow_redirects=False,
+                                    headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
+            if response.status_code in (301,302,303,307,308):
+                location=response.headers.get('Location')
+                if not isinstance(location,str) or not location:
+                    raise ImportFailure('oi_fetch_failed')
+                next_id,next_url=product_url(urljoin(url,location))
+                if next_id != expected_id:
+                    raise ImportFailure('oi_bad_product')
+                url=next_url
+                continue
+            if response.status_code != 200:
+                raise ImportFailure("oi_fetch_failed")
+            return parse_product(response.text, url)
+        raise ImportFailure('oi_fetch_failed')
     except requests.RequestException as exc:
         raise ImportFailure("oi_fetch_failed") from exc
 

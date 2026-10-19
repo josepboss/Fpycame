@@ -1,6 +1,7 @@
 """Persistent supplier-to-offer links shared by the web admin and Cardinal."""
 from __future__ import annotations
 
+from decimal import Decimal
 import json
 import logging
 import sqlite3
@@ -10,7 +11,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from admin.services.offer_import import fetch_live_stock, product_url
+from admin.services.offer_import import fetch_live_stock, product_url, fetch_product, selling_price
+from admin.services.delivery_mapping import alias_delivery_mapping
 
 DB_PATH = Path("storage/cache/offer_stock.sqlite3")
 PUBLICATIONS_DB = Path("storage/cache/offer_imports.sqlite3")
@@ -32,6 +34,9 @@ def database() -> Iterator[sqlite3.Connection]:
             columns = {row[1] for row in db.execute("PRAGMA table_info(mappings)")}
             if "auto_paused" not in columns:
                 db.execute("ALTER TABLE mappings ADD COLUMN auto_paused INTEGER NOT NULL DEFAULT 0")
+            for name in ('supplier_title', 'supplier_price', 'markup'):
+                if name not in columns:
+                    db.execute(f'ALTER TABLE mappings ADD COLUMN {name} TEXT')
             yield db
     finally:
         db.close()
@@ -56,16 +61,16 @@ def response_offer_id(result: dict) -> int | None:
 
 
 def save_mapping(account: int, node: int, product: dict, title: str,
-                 offer_id: int | None = None, replace: bool = True) -> None:
+                 offer_id: int | None = None, replace: bool = True, markup: str | None = None) -> None:
     product_id, url = product_url(product["url"])
     if product_id != product["product_id"]:
         raise ValueError("Product identity mismatch")
     with database() as db:
         conflict = """DO UPDATE SET source_url=excluded.source_url, title=excluded.title,
-            offer_id=excluded.offer_id, state='pending', last_error='', checked=NULL, auto_paused=0""" if replace else "DO NOTHING"
-        db.execute(f"""INSERT INTO mappings(account,node,product,source_url,title,offer_id)
-            VALUES (?,?,?,?,?,?) ON CONFLICT(account,node,product) {conflict}""",
-            (account, node, product_id, url, title, offer_id))
+            offer_id=excluded.offer_id, state='pending', last_error='', checked=NULL, auto_paused=0, supplier_title=excluded.supplier_title, supplier_price=excluded.supplier_price, markup=excluded.markup""" if replace else "DO NOTHING"
+        db.execute(f"""INSERT INTO mappings(account,node,product,source_url,title,offer_id,supplier_title,supplier_price,markup)
+            VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(account,node,product) {conflict}""",
+            (account, node, product_id, url, title, offer_id, product.get("title",title),product.get("price"),markup))
 
 
 def mappings(account: int | None = None) -> list[dict]:
@@ -86,6 +91,10 @@ def migrate_publications(account: int) -> None:
     for node, raw in rows:
         product = json.loads(raw)
         save_mapping(account, node, product, product["title"], replace=False)
+        with database() as db:
+            db.execute("""UPDATE mappings SET supplier_title=COALESCE(supplier_title,?),
+                supplier_price=COALESCE(supplier_price,?) WHERE account=? AND node=? AND product=?""",
+                (product['title'],product['price'],account,node,product['product_id']))
 
 
 def check_stock(account) -> None:
@@ -149,3 +158,63 @@ def check_stock(account) -> None:
             with database() as db:
                 db.execute("UPDATE mappings SET checked=?,last_error=? WHERE account=? AND node=? AND product=?",
                            (time.time(), type(exc).__name__, *identity))
+
+
+def sync_metadata(account, cardinal=None) -> None:
+    """Follow supplier title/price changes without changing stable offer/product IDs."""
+    for mapping in mappings(account.id):
+        if not mapping['offer_id']:
+            continue
+        identity=(mapping['account'],mapping['node'],mapping['product'])
+        try:
+            product=fetch_product(mapping['source_url'])
+            if product.product_id != mapping['product']:
+                raise ValueError('Supplier product mismatch')
+            title_changed=product.title != (mapping['supplier_title'] or mapping['title'])
+            price_changed=mapping['supplier_price'] is not None and Decimal(product.price) != Decimal(mapping['supplier_price'])
+            if title_changed and (len(product.title)>100 or not product.title.strip() or '\n' in product.title or '\r' in product.title):
+                raise ValueError('Supplier title is not a valid FunPay title')
+            markup=mapping['markup']
+            fields=None
+            if title_changed or price_changed or markup is None:
+                fields=account.get_lot_fields(mapping['offer_id'])
+                if int(fields.lot_id)!=mapping['offer_id'] or str(fields.fields.get('node_id'))!=str(mapping['node']):
+                    raise ValueError('Offer identity mismatch')
+                if markup is None and mapping['supplier_price']:
+                    markup=str(((Decimal(str(fields.price))/Decimal(mapping['supplier_price'])-1)*100).quantize(Decimal('0.01')))
+            changed=False
+            if title_changed:
+                existing=account.get_my_subcategory_lots(mapping['node'],locale='en')
+                if any(lot.description==product.title and int(lot.id)!=mapping['offer_id'] for lot in existing):
+                    raise ValueError('New title conflicts with another FunPay offer')
+                alias_delivery_mapping(mapping['title'],product.title,mapping['product'])
+                if cardinal is not None:
+                    from Utils.config_loader import load_auto_delivery_config
+                    from admin.services.delivery_mapping import AUTO_CFG
+                    cardinal.AD_CFG=load_auto_delivery_config(str(AUTO_CFG))
+                fields.title_en=product.title
+                fields.title_ru=product.title
+                changed=True
+            target_price=None
+            if price_changed:
+                if markup is None:
+                    raise ValueError('Missing markup baseline')
+                target_price=selling_price(product.price,markup)
+                fields.price=float(target_price)
+                changed=True
+            if changed:
+                account.save_lot(fields,locale='en')
+                saved=account.get_lot_fields(mapping['offer_id'])
+                if title_changed and (saved.title_en!=product.title or saved.title_ru!=product.title):
+                    raise ValueError('Title update not confirmed')
+                if target_price and Decimal(str(saved.price))!=Decimal(target_price):
+                    raise ValueError('Price update not confirmed')
+            with database() as db:
+                db.execute("""UPDATE mappings SET title=?,supplier_title=?,supplier_price=?,markup=?,source_url=?
+                    WHERE account=? AND node=? AND product=?""",
+                    (product.title if title_changed else mapping['title'],product.title,product.price,markup,product.url,*identity))
+        except Exception as exc:
+            logger.warning('Offer metadata sync failed for product %s (%s).',mapping['product'],type(exc).__name__)
+            with database() as db:
+                db.execute('UPDATE mappings SET last_error=? WHERE account=? AND node=? AND product=?',
+                           ('Metadata:'+type(exc).__name__,*identity))

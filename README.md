@@ -251,3 +251,25 @@ inside credentials are not interpreted as commands. Messages still follow Cardin
 Previously shortened stock records are not repaired by this change; recover the
 original purchased record from HStore before retrying an affected order. Do not
 purchase another account merely to retry delivery.
+
+## Supplier title and price changes
+
+The Cardinal monitor also checks the supplier product title and unit price. Mappings
+keep their HStore product ID and FunPay offer ID, even when the title/URL slug changes.
+New imports save the selected markup, and supplier price changes recalculate the
+FunPay unit price using that same markup and cent rounding. Existing mappings infer
+markup from the current seller price and saved supplier-price snapshot when possible;
+without a reliable baseline, a price change is reported as a sync error.
+
+When the supplier title changes, the monitor prepares the matching API/auto-delivery
+configuration under the new title and reloads Cardinal's delivery configuration
+before updating and verifying the FunPay title. The old title is retained as an alias
+for pending orders, sharing the original stock file and delivery response. Removing
+one alias from Lots preserves the stock file while another mapping still uses it.
+Conflicting titles/mappings and failed updates are reported rather than overwriting
+unrelated offers. Descriptions and manual activation choices are preserved.
+
+The Imports table shows the last supplier price and saved/inferred markup. Updates
+run in the existing monitor cycle; deploy and restart both `funpay-admin` and
+`funpay-cardinal` to enable them. Product redirects are only followed within
+`https://hstora.com/en/product/` and must retain the same product ID.

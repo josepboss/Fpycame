@@ -67,6 +67,20 @@ class ProductTests(unittest.TestCase):
         get.return_value.status_code=503
         with self.assertRaises(ImportFailure):fetch_live_stock(1783)
 
+    @patch('admin.services.offer_import.requests.get')
+    def test_product_slug_redirect_stays_on_same_product(self,get):
+        redirect=Mock(status_code=301,headers={'Location':'/en/product/1358-new-title'})
+        page=Mock(status_code=200,text=HTML)
+        get.side_effect=[redirect,page]
+        self.assertEqual(fetch_product(URL).url,'https://hstora.com/en/product/1358-new-title')
+
+    @patch('admin.services.offer_import.requests.get')
+    def test_redirect_cannot_change_host_or_product(self,get):
+        for location in ['https://evil.test/en/product/1358','/en/product/999-another-product']:
+            get.return_value=Mock(status_code=301,headers={'Location':location})
+            get.side_effect=None
+            with self.subTest(location=location),self.assertRaises(ImportFailure):fetch_product(URL)
+
     def test_url_restrictions(self):
         for url in ['http://hstora.com/en/product/1358', 'https://hstora.com.evil/en/product/1358',
                     'https://hstora.com@localhost/en/product/1358', 'https://127.0.0.1/en/product/1358',

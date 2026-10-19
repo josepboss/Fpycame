@@ -96,7 +96,7 @@ document.getElementById('publishForm').addEventListener('submit', () => {
         </form>
     </details>
     <div class="overflow-x-auto"><table class="w-full text-left">
-        <thead><tr><th class="p-2">{{ _('oi_title') }}</th><th class="p-2">HStore</th><th class="p-2">FunPay</th><th class="p-2">{{ _('oi_available') }}</th><th class="p-2">{{ _('oi_stock_status') }}</th><th class="p-2">{{ _('oi_stock_checked') }}</th></tr></thead>
+        <thead><tr><th class="p-2">{{ _('oi_title') }}</th><th class="p-2">HStore</th><th class="p-2">FunPay</th><th class="p-2">{{ _('oi_available') }}</th><th class="p-2">{{ _('oi_stock_status') }}</th><th class="p-2">{{ _('oi_stock_checked') }}</th><th class="p-2">{{ _('oi_supplier_price') }}</th><th class="p-2">{{ _('oi_markup') }}</th></tr></thead>
         <tbody>{% for mapping in stock_mappings %}<tr class="border-t">
             <td class="p-2">{{ mapping.title }}</td>
             <td class="p-2"><a class="text-blue-700 underline" href="{{ mapping.source_url }}" target="_blank" rel="noopener">#{{ mapping.product }}</a></td>
@@ -104,6 +104,8 @@ document.getElementById('publishForm').addEventListener('submit', () => {
             <td class="p-2">{{ mapping.last_stock if mapping.last_stock is not none else '—' }}</td>
             <td class="p-2">{{ _('oi_stock_error') if mapping.last_error else (_('oi_stock_stale') if mapping.stale else _('oi_stock_' + mapping.state)) }}</td>
             <td class="p-2">{{ mapping.checked|timestamp_to_str if mapping.checked else '—' }}</td>
+            <td class="p-2">{{ ('$' + mapping.supplier_price) if mapping.supplier_price else '—' }}</td>
+            <td class="p-2">{{ (mapping.markup + '%') if mapping.markup is not none else '—' }}</td>
         </tr>{% endfor %}</tbody>
     </table></div>
 </section>

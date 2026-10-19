@@ -95,3 +95,25 @@ def save_delivery_mapping(title: str, provider: str, item_id: str, enabled: bool
             auto[title]['disableAutoRestore'] = '1'
         atomic_write(auto, AUTO_CFG)
         atomic_write(api, API_CFG)
+
+
+def alias_delivery_mapping(old_title: str, new_title: str, product_id: int) -> None:
+    """Retain the old name for pending orders while adding the supplier's new name."""
+    if old_title == new_title:
+        return
+    with _lock:
+        check_import_mapping(new_title, product_id)
+        api, auto = read_configs()
+        if new_title in auto and new_title not in api:
+            raise MappingConflict('New title has an unrelated delivery configuration')
+        if old_title not in api or old_title not in auto:
+            raise MappingConflict('Original delivery mapping missing')
+        if api[old_title].get('provider') != 'hstore' or api[old_title].get('product_id') != str(product_id):
+            raise MappingConflict('Original mapping points to another product')
+        # Never overwrite an independently configured response/inventory file.
+        if new_title not in auto:
+            auto[new_title] = dict(auto[old_title])
+        if new_title not in api:
+            api[new_title] = dict(api[old_title])
+        atomic_write(auto, AUTO_CFG)
+        atomic_write(api, API_CFG)

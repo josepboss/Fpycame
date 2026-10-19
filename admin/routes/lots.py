@@ -132,7 +132,9 @@ async def delete_lot(
     write_auto_cfg(auto_cfg)
 
     # 3. Delete the stock file
-    if stock_file_name:
+    if stock_file_name and not any(
+        auto_cfg[section].get("productsFileName") == stock_file_name for section in auto_cfg.sections()
+    ):
         stock_path = os.path.join("storage/products", stock_file_name)
         if os.path.exists(stock_path):
             try:

@@ -143,7 +143,7 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
                     raise ImportFailure("oi_duplicate")
         claimed = True
         result = submit_offer(account, fields)
-        offer_stock.save_mapping(account.id, node, product, title, offer_stock.response_offer_id(result))
+        offer_stock.save_mapping(account.id, node, product, title, offer_stock.response_offer_id(result), markup=markup)
         with database() as db:
             db.execute("UPDATE publications SET state = 'published' WHERE draft = ?", (draft,))
         # Publishing already succeeded. Mapping/restart errors must never invite

@@ -6,14 +6,14 @@ from threading import Thread
 from time import sleep
 from typing import TYPE_CHECKING
 
-from admin.services.offer_stock import check_stock, migrate_publications
+from admin.services.offer_stock import check_stock, migrate_publications, sync_metadata
 
 if TYPE_CHECKING:
     from cardinal import Cardinal
 
 NAME = "Imported Offer Stock Monitor"
 VERSION = "1.0.0"
-DESCRIPTION = "Deactivate imported FunPay offers when HStore stock reaches zero."
+DESCRIPTION = "Sync HStore stock, titles, and prices while preserving delivery mappings."
 CREDITS = "Cardinal"
 UUID = "80921053-5ce8-4c4f-b782-80dff7af45c4"
 SETTINGS_PAGE = False
@@ -37,6 +37,7 @@ def start_monitor(cardinal: Cardinal) -> None:
                     logger.warning("Stock mapping migration failed (%s).", type(exc).__name__)
                 try:
                     check_stock(cardinal.account)
+                    sync_metadata(cardinal.account, cardinal)
                 except Exception as exc:
                     logger.warning("Stock monitor cycle failed (%s).", type(exc).__name__)
             sleep(60)
