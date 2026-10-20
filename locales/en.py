@@ -736,3 +736,23 @@ oi_markup_save = 'Save %'
 oi_markup_required = 'Set your markup to enable price updates.'
 
 oi_markup_saved = 'Markup saved. The monitor will apply it on the next successful check.'
+
+# Readable account delivery
+delivery_field_instructions = 'Your account details are listed below. Only long fields are split. For a split field, join the text inside the outer [ ] in order, adding no spaces or newlines. Do not combine different fields or accounts.'
+delivery_field_username = 'Username'
+delivery_field_password = 'Password'
+delivery_field_email = 'Email'
+delivery_field_email_password = 'Email password'
+delivery_field_2fa = '2FA secret'
+delivery_field_auth = 'Auth token'
+delivery_field_client = 'Email client ID'
+delivery_field_refresh = 'Email refresh token'
+delivery_field_part = 'Product {} / {} {}/{}:'
+
+# Optional per-offer delivery schemas
+delivery_format_label = 'Delivery format (optional)'
+delivery_format_optional = 'Leave blank for automatic detection'
+delivery_format_save = 'Save format'
+delivery_format_hint = 'Use field names with the seller’s exact separators: username, password, email, email_password, refresh_token, client_id, 2fa, auth_token, ct0. Without a format, complete M.C-prefixed fields of at least 100 characters are omitted by heuristic; other long data is preserved.'
+delivery_format_invalid = 'Invalid format. Use supported field names once each and separators such as ----, |, or :.'
+delivery_field_ct0 = 'CT0 token'

@@ -602,7 +602,7 @@ def deliver_goods(c: Cardinal, e: NewOrderEvent, *args):
             if c.multidelivery_enabled and not cfg_obj.getboolean("disableMultiDelivery"):
                 amount = e.order.amount if e.order.amount else 1
             products, goods_left = cardinal_tools.get_products(f"storage/products/{file_name}", amount)
-            product_text, chunked = format_products(products, _)
+            product_text, chunked = format_products(products, _, cfg_obj.get("deliveryFormat", ""))
             if not chunked:
                 product_text = product_text.replace("\\n", "\n")
             delivery_text = delivery_text.replace("$product", product_text)

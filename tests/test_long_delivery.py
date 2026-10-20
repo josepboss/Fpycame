@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from Utils.delivery_tools import format_products
+from Utils.delivery_tools import format_products, account_fields, format_spec, remove_refresh_hints
 from locales.localizer import Localizer
 
 
@@ -40,6 +40,92 @@ class LongDeliveryTests(unittest.TestCase):
         record='  '+('X'*61)+' [a]: | '+('Y'*100)+'  '
         text,_=format_products([record],translate)
         self.assertEqual(reconstruct(text),[record])
+
+    def test_known_account_format_omits_only_refresh_token(self):
+        token='FAKE_REFRESH_'*30
+        record=f'demo_user----demo_pass----demo@example.test|mail_pass|{token}|client_demo----2FA_DEMO----auth_demo'
+        text,literal=format_products([record],translate)
+        self.assertTrue(literal)
+        self.assertIn('Username: demo_user',text)
+        self.assertIn('Password: demo_pass',text)
+        self.assertIn('Email: demo@example.test',text)
+        self.assertIn('Email password: mail_pass',text)
+        self.assertIn('2FA secret: 2FA_DEMO',text)
+        self.assertIn('Auth token: auth_demo',text)
+        self.assertIn('Email client ID: client_demo',text)
+        chunks=re.findall(r'^Product 1 / Email refresh token \d+/\d+: \[(.*)\]$',text,re.M)
+        self.assertEqual(chunks,[])
+        self.assertNotIn('Email refresh token',text)
+        self.assertNotIn('FAKE_REFRESH_',text)
+        self.assertLessEqual(max(map(len,re.findall(r'\S+',text))),80)
+        self.assertNotIn('Part 1/',text)
+
+    def test_structured_parser_roundtrips_original_format(self):
+        original='user----pass----mail@example.test|mailpass|refresh|client----2fa----auth'
+        values=dict(account_fields(original))
+        reconstructed='----'.join([values['delivery_field_username'],values['delivery_field_password'],
+            '|'.join(values[k] for k in ('delivery_field_email','delivery_field_email_password','delivery_field_refresh','delivery_field_client')),
+            values['delivery_field_2fa'],values['delivery_field_auth']])
+        self.assertEqual(reconstructed,original)
+
+    def test_unknown_or_ambiguous_formats_are_never_guessed(self):
+        for record in ['user----pass----mail@example.test|pass|token----2fa----auth',
+                       'user----pass----not-an-email|pass|refresh|client----2fa----auth',
+                       'user----pass----mail@example.test|pass|refresh|client----2fa----auth----extra']:
+            self.assertIsNone(account_fields(record))
+
+    def test_three_accounts_omit_refresh_tokens_and_keep_account_fields(self):
+        products=[f'user{n}----pass{n}----mail{n}@example.test|mailpass|'+('FAKE_REFRESH_'*40)+f'|client----2fa{n}----auth{n}' for n in range(1,4)]
+        text,_=format_products(products,translate)
+        for n in range(1,4):
+            self.assertIn(f'Product {n}',text)
+            self.assertIn(f'Username: user{n}',text)
+        self.assertNotIn('FAKE_REFRESH_',text)
+        self.assertEqual(text.count('Username:'),3)
+
+    def test_long_auth_token_is_preserved_and_split_instead_of_removed(self):
+        auth='FAKE_AUTH_'*30
+        record=f'user----pass----mail@example.test|mailpass|OMIT_REFRESH|client----2fa----{auth}'
+        text,_=format_products([record],translate)
+        chunks=re.findall(r'^Product 1 / Auth token \d+/\d+: \[(.*)\]$',text,re.M)
+        self.assertEqual(''.join(chunks),auth)
+        self.assertNotIn('OMIT_REFRESH',text)
+
+    def test_optional_schema_supports_different_field_order_and_separators(self):
+        text,_=format_products(['mail@example.test:secret:user:REFRESH_WITHOUT_PREFIX:auth'],translate,
+                              'email:password:username:refresh_token:auth_token')
+        self.assertIn('Username: user',text)
+        self.assertIn('Email: mail@example.test',text)
+        self.assertIn('Password: secret',text)
+        self.assertIn('Auth token: auth',text)
+        self.assertNotIn('REFRESH_WITHOUT_PREFIX',text)
+
+    def test_configured_password_with_mc_prefix_is_not_removed(self):
+        password='M.C'+'X'*120
+        text,_=format_products(['user|'+password+'|auth'],translate,'username|password|auth_token')
+        chunks=re.findall(r'^Product 1 / Password \d+/\d+: \[(.*)\]$',text,re.M)
+        self.assertEqual(''.join(chunks),password)
+
+    def test_missing_schema_removes_only_long_complete_mc_fields(self):
+        token='M.C'+'X'*120
+        for separator in ['|',':','----',';',' ']:
+            record=separator.join(['user','password',token,'auth'])
+            with self.subTest(separator=separator):
+                self.assertEqual(remove_refresh_hints(record),separator.join(['user','password','','auth']))
+        self.assertEqual(remove_refresh_hints(token),'')
+        self.assertEqual(remove_refresh_hints('M.C'+'X'*96),'M.C'+'X'*96)
+        self.assertEqual(remove_refresh_hints('auth|'+'Z'*200),'auth|'+'Z'*200)
+        self.assertEqual(remove_refresh_hints('prefixM.C'+'X'*120),'prefixM.C'+'X'*120)
+
+    def test_schema_mismatch_falls_back_without_wrong_labels(self):
+        text,_=format_products(['user|password|M.C'+'X'*120+'|auth'],translate,'username:password:auth_token')
+        self.assertNotIn('Username:',text)
+        self.assertNotIn('M.C',text)
+        self.assertIn('password',text)
+
+    def test_schema_validation_rejects_unknown_duplicate_and_unsafe_templates(self):
+        for spec in ['username|unknown','username|username','refresh_token','username<password','username\npassword']:
+            with self.subTest(spec=spec),self.assertRaises(ValueError):format_spec(spec)
 
     def test_short_credentials_are_unchanged(self):
         products=['user:pass','second:pass']

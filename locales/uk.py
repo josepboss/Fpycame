@@ -95,3 +95,23 @@ oi_markup_save = 'Зберегти %'
 oi_markup_required = 'Вкажіть націнку для оновлення ціни.'
 
 oi_markup_saved = 'Націнку збережено. Монітор застосує її під час наступної успішної перевірки.'
+
+# Readable account delivery
+delivery_field_instructions = 'Нижче дані ваших акаунтів. Лише довгі поля розбито на частини. З’єднайте текст усередині зовнішніх [ ] за порядком без додавання пробілів чи переносів рядків. Не об’єднуйте різні поля або акаунти.'
+delivery_field_username = 'Логін'
+delivery_field_password = 'Пароль'
+delivery_field_email = 'Пошта'
+delivery_field_email_password = 'Пароль пошти'
+delivery_field_2fa = 'Секрет 2FA'
+delivery_field_auth = 'Токен входу'
+delivery_field_client = 'ID поштового клієнта'
+delivery_field_refresh = 'Токен оновлення пошти'
+delivery_field_part = 'Товар {} / {} {}/{}:'
+
+# Optional per-offer delivery schemas
+delivery_format_label = 'Формат видачі (необов’язково)'
+delivery_format_optional = 'Порожньо — автоматичне визначення'
+delivery_format_save = 'Зберегти формат'
+delivery_format_hint = 'Вкажіть назви полів із точними роздільниками продавця: username, password, email, email_password, refresh_token, client_id, 2fa, auth_token, ct0. Без формату евристика виключає цілі поля від 100 символів із префіксом M.C; решта довгих даних зберігається.'
+delivery_format_invalid = 'Неправильний формат. Використовуйте підтримувані поля по одному разу та роздільники ----, | або :.'
+delivery_field_ct0 = 'Токен CT0'

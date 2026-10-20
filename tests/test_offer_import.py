@@ -152,6 +152,7 @@ class WorkflowTests(unittest.TestCase):
         self.start_patch('admin.services.delivery_mapping.AUTO_CFG', Path(self.temp.name) / 'auto.cfg')
         self.start_patch('admin.services.delivery_mapping.PRODUCTS', Path(self.temp.name) / 'products')
         self.start_patch('admin.routes.lots.API_DELIVERY_CFG', str(Path(self.temp.name) / 'api.cfg'))
+        self.start_patch('admin.routes.lots.AUTO_DELIVERY_CFG', str(Path(self.temp.name) / 'auto.cfg'))
         self.restart = self.start_patch('admin.routes.import_offers.restart_cardinal', return_value=True)
         self.start_patch('admin.routes.import_offers.get_csrf_token', return_value='csrf')
         self.start_patch('admin.routes.import_offers.validate_csrf_token', side_effect=lambda t: t == 'csrf')
@@ -225,6 +226,17 @@ class WorkflowTests(unittest.TestCase):
         self.account.method.reset_mock()
         self.assertIn('already listed', self.publish(draft).text)
         self.account.session.post.assert_called_once()
+
+    def test_lots_format_can_be_saved_edited_and_cleared(self):
+        from admin.services.delivery_mapping import save_delivery_mapping, read_configs
+        save_delivery_mapping('Existing','hstore','1358',True)
+        with patch('admin.routes.lots.validate_csrf_token',return_value=True),patch('admin.routes.lots.get_csrf_token',return_value='csrf'),patch('admin.routes.lots.restart_cardinal',return_value=True):
+            for spec in ['username|password|refresh_token|auth_token','']:
+                response=self.client.post('/lots/format',data={'lot_name':'Existing','csrf_token':'csrf','delivery_format':spec},follow_redirects=False)
+                self.assertEqual(response.status_code,303)
+                self.assertEqual(read_configs()[1]['Existing']['deliveryFormat'],spec)
+            response=self.client.post('/lots/format',data={'lot_name':'Existing','csrf_token':'csrf','delivery_format':'unknown'})
+            self.assertEqual(response.status_code,400)
 
     def test_successful_publication_enables_delivery_and_appears_in_lots(self):
         self.publish(self.preview())

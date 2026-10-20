@@ -58,7 +58,10 @@ def atomic_write(config: configparser.ConfigParser, path: Path) -> None:
 
 
 def save_delivery_mapping(title: str, provider: str, item_id: str, enabled: bool,
-                          imported: bool = False) -> None:
+                          imported: bool = False, delivery_format: str | None = None) -> None:
+    if delivery_format is not None and delivery_format.strip():
+        from Utils.delivery_tools import format_spec
+        format_spec(delivery_format.strip())
     title = title.strip()
     if not title or '\n' in title or '\r' in title:
         raise MappingConflict('Invalid mapping title')
@@ -75,6 +78,8 @@ def save_delivery_mapping(title: str, provider: str, item_id: str, enabled: bool
         api[title]['enabled'] = '1' if enabled else '0'
         if title not in auto:
             auto.add_section(title)
+        if delivery_format is not None:
+            auto[title]['deliveryFormat'] = delivery_format.strip()
         if not auto[title].get('response'):
             auto[title]['response'] = Localizer().translate('oi_delivery_response', language='en')
         filename = auto[title].get('productsFileName')

@@ -47,6 +47,21 @@ class DeliveryMappingTests(unittest.TestCase):
         self.assertEqual(delivery.API_CFG.read_bytes(),before_api)
         self.assertEqual(delivery.AUTO_CFG.read_bytes(),before_auto)
 
+    def test_optional_schema_is_saved_preserved_by_import_and_can_be_cleared(self):
+        spec='username|password|refresh_token|auth_token'
+        delivery.save_delivery_mapping('Lot','hstore','1358',True,delivery_format=spec)
+        delivery.save_delivery_mapping('Lot','hstore','1358',True,imported=True)
+        self.assertEqual(delivery.read_configs()[1]['Lot']['deliveryFormat'],spec)
+        delivery.alias_delivery_mapping('Lot','Renamed',1358)
+        self.assertEqual(delivery.read_configs()[1]['Renamed']['deliveryFormat'],spec)
+        delivery.save_delivery_mapping('Lot','hstore','1358',True,delivery_format='')
+        self.assertEqual(delivery.read_configs()[1]['Lot']['deliveryFormat'],'')
+
+    def test_invalid_schema_does_not_write_configs(self):
+        with self.assertRaises(ValueError):
+            delivery.save_delivery_mapping('Lot','hstore','1358',True,delivery_format='username|unsupported')
+        self.assertFalse(delivery.API_CFG.exists())
+
     def test_unrelated_mapping_survives_new_import(self):
         delivery.save_delivery_mapping('Existing','smmcost','777',True)
         delivery.save_delivery_mapping('Imported','hstore','1358',True,imported=True)

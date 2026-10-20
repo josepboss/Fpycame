@@ -240,10 +240,17 @@ failures appear in the Cardinal logs under `FPC.offer_stock`.
 ## Long credential delivery
 
 HStore records are now saved intact: long refresh tokens and other fields are never
-removed. If a product contains an uninterrupted word longer than 80 characters,
-delivery formats the complete record into numbered, bracketed chunks of at most
-64 characters. Buyers join the content inside the outer brackets in order, without
-adding spaces or newlines. Short product records keep their existing format.
+removed. Recognized five-section `----` account records containing a four-part `|` email
+section are delivered as labeled username, password, email, email password, 2FA,
+auth token, and email client ID. The recognized email refresh-token field is omitted
+from buyer messages at the operator’s request; the original supplier/stock record
+retains it. With no configured format, a delimiter-bounded field beginning with `M.C`
+and at least 100 characters long is omitted from buyer delivery using the
+operator-requested heuristic. Other long fields are retained. Only long individual fields
+are split into bracketed parts of at most 64 characters; each part repeats its
+product number and field name. Unsupported field layouts are not assigned guessed labels: after the token
+heuristic, remaining long records use complete-record chunking. Buyers join the content inside the outer brackets in order, without
+adding spaces or newlines. Unrecognized short product records keep their existing format.
 
 Chunked delivery uses plain-text mode, so strings resembling `$photo` or `$sleep`
 inside credentials are not interpreted as commands. Messages still follow Cardinal's
@@ -277,3 +284,29 @@ The Imports table shows the last supplier price and an editable, explicitly conf
 run in the existing monitor cycle; deploy and restart both `funpay-admin` and
 `funpay-cardinal` to enable them. Product redirects are only followed within
 `https://hstora.com/en/product/` and must retain the same product ID.
+
+
+## Optional per-offer delivery format
+
+Set **Delivery format (optional)** in Lots when adding/editing a mapping, or use
+**Save format** on an existing row. Leave it blank to use automatic recognition and
+the long `M.C` token heuristic. Saving the format restarts Cardinal to load it;
+automatic imports preserve an existing format, and supplier-title aliases copy it.
+
+Example:
+
+```text
+username----password----email|email_password|refresh_token|client_id----2fa----auth_token
+```
+
+Use the seller's exact separators. Supported field names are `username`, `password`,
+`email`, `email_password`, `refresh_token`, `client_id`, `2fa`, `auth_token`, and `ct0`.
+Use each field name at most once. Configured `refresh_token` fields are omitted
+regardless of prefix or length; other fields, including a configured password
+starting with `M.C`, are preserved. Clearing the format restores automatic behavior.
+A record that doesn't match the format falls back to the heuristic and safe
+chunking rather than delivering incorrectly labeled values.
+
+This is a formatting step only: the original supplier/stock data is unchanged.
+The prefix/length fallback is a heuristic, not a guarantee that a field is a refresh
+token; provide an explicit format whenever the seller's layout is known.

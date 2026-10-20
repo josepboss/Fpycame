@@ -23,6 +23,10 @@
             <input type="checkbox" name="enabled" value="true" checked>
             <span>Enabled</span>
         </label>
+        <label class="block md:col-span-2">{{ _('delivery_format_label') }}
+            <input name="delivery_format" maxlength="500" placeholder="username----password----email|email_password|refresh_token|client_id----2fa----auth_token" class="block w-full border p-2 rounded mt-1">
+            <span class="text-sm text-gray-600">{{ _('delivery_format_hint') }}</span>
+        </label>
         <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save Lot</button>
     </form>
 </div>
@@ -33,6 +37,7 @@
             <th class="py-2 px-4 border-b text-left">Provider</th>
             <th class="py-2 px-4 border-b text-left">ID</th>
             <th class="py-2 px-4 border-b text-left">Enabled</th>
+            <th class="py-2 px-4 border-b text-left">{{ _('delivery_format_label') }}</th>
             <th class="py-2 px-4 border-b text-left">Actions</th>
         </tr>
     </thead>
@@ -43,6 +48,14 @@
             <td class="py-2 px-4 border-b">{{ lot.provider }}</td>
             <td class="py-2 px-4 border-b">{{ lot.id }}</td>
             <td class="py-2 px-4 border-b">{{ "Yes" if lot.enabled else "No" }}</td>
+            <td class="py-2 px-4 border-b">
+                <form action="/lots/format" method="post" class="flex gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="lot_name" value="{{ lot.name }}">
+                    <input aria-label="{{ _('delivery_format_label') }}" name="delivery_format" maxlength="500" value="{{ lot.delivery_format }}" placeholder="{{ _('delivery_format_optional') }}" class="border p-2 rounded w-80">
+                    <button class="text-blue-700 underline">{{ _('delivery_format_save') }}</button>
+                </form>
+            </td>
             <td class="py-2 px-4 border-b">
                 <form action="/lots/delete" method="post" onsubmit="return confirm('Are you sure you want to delete this offer mapping?')" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

@@ -10,7 +10,7 @@ import os
 from locales.localizer import Localizer
 from admin.services.delivery_mapping import save_delivery_mapping
 
-from admin.auth import get_csrf_token, validate_csrf_token
+from admin.auth import get_csrf_token, validate_csrf_token, translate
 
 router = APIRouter()
 
@@ -61,6 +61,7 @@ def restart_cardinal():
 @router.get("/")
 async def list_lots(request: Request, flash: str = ""):
     api_cfg = get_api_cfg()
+    auto_cfg = get_auto_cfg()
     lots_list = []
     for section in api_cfg.sections():
         lots_list.append({
@@ -68,11 +69,13 @@ async def list_lots(request: Request, flash: str = ""):
             "provider": api_cfg[section].get("provider", ""),
             "id": api_cfg[section].get("product_id") or api_cfg[section].get("service_id", ""),
             "enabled": api_cfg[section].getboolean("enabled", fallback=False),
+            "delivery_format": auto_cfg[section].get("deliveryFormat", "") if section in auto_cfg else "",
         })
     csrf_token = get_csrf_token()
     return templates.TemplateResponse(request=request, name="lots.html", context={
         "request": request,
         "lots": lots_list,
+        "_": translate,
         "import_label": Localizer().translate("oi_heading", language="en"),
         "flash": flash,
         "csrf_token": csrf_token,
@@ -86,13 +89,17 @@ async def save_lot(
     item_id: str = Form(...),
     enabled: bool = Form(False),
     csrf_token: str = Form(""),
+    delivery_format: str = Form(""),
 ):
     if not csrf_token or not validate_csrf_token(csrf_token):
         raise HTTPException(status_code=403, detail="Invalid CSRF token")
 
     lot_name = lot_name.strip()
 
-    save_delivery_mapping(lot_name, provider, item_id, enabled)
+    try:
+        save_delivery_mapping(lot_name, provider, item_id, enabled, delivery_format=delivery_format)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=translate('delivery_format_invalid'))
 
     restart_ok = restart_cardinal()
     if restart_ok:
@@ -148,3 +155,15 @@ async def delete_lot(
     # 5. Redirect with flash
     flash_msg = quote(f'Offer mapping for "{lot_name}" deleted successfully')
     return RedirectResponse(url=f"/lots?flash={flash_msg}", status_code=303)
+
+@router.post('/format')
+async def save_format(lot_name: str = Form(...), delivery_format: str = Form(''), csrf_token: str = Form('')):
+    if not csrf_token or not validate_csrf_token(csrf_token):
+        raise HTTPException(status_code=403, detail='Invalid CSRF token')
+    api=get_api_cfg()
+    if lot_name not in api:
+        raise HTTPException(status_code=404, detail='Mapping not found')
+    row=api[lot_name]
+    return await save_lot(lot_name=lot_name,provider=row['provider'],
+        item_id=row.get('product_id') or row.get('service_id',''),
+        enabled=row.getboolean('enabled',fallback=False),csrf_token=csrf_token,delivery_format=delivery_format)
