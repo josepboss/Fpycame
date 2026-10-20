@@ -227,6 +227,59 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('already listed', self.publish(draft).text)
         self.account.session.post.assert_called_once()
 
+    def test_remove_offer_cleans_maps_and_allows_reimport(self):
+        from admin.services import offer_stock,delivery_mapping
+        draft=self.preview()
+        self.account.session.post.return_value.json.return_value={'done':True,'offer_id':79665384}
+        self.publish(draft)
+        delivery_mapping.alias_delivery_mapping(self.product.title,'Renamed',1358)
+        _,auto=delivery_mapping.read_configs()
+        inventory=delivery_mapping.PRODUCTS/auto[self.product.title]['productsFileName']
+        inventory.write_text('preserved inventory')
+        self.account.get_my_subcategory_lots.side_effect=[[SimpleNamespace(id=79665384)],[]]
+        self.account.get_lot_fields.return_value=SimpleNamespace(lot_id=79665384,fields={'node_id':'1259'})
+        page=self.client.get('/imports/remove?account_id=123&node=1259&product_id=1358')
+        self.assertIn('I confirm removal',page.text)
+        self.account.delete_lot.assert_not_called()
+        response=self.client.post('/imports/remove',data={'csrf_token':'csrf','confirm':'true','account_id':123,'node':1259,'product_id':1358},follow_redirects=False)
+        self.assertEqual(response.status_code,303)
+        self.account.delete_lot.assert_called_once_with(79665384)
+        self.assertEqual(offer_stock.mappings(123),[])
+        self.assertEqual(delivery_mapping.read_configs()[0].sections(),[])
+        self.assertEqual(inventory.read_text(),'preserved inventory')
+        with routes.database() as db:self.assertIsNone(db.execute('SELECT * FROM publications').fetchone())
+        self.account.get_my_subcategory_lots.side_effect=None
+        self.account.get_my_subcategory_lots.return_value=[]
+        self.assertIn('Offer published successfully',self.publish(self.preview()).text)
+
+    def test_remove_requires_csrf_confirmation_and_matching_account(self):
+        from admin.services import offer_stock
+        self.account.session.post.return_value.json.return_value={'done':True,'offer_id':79665384}
+        self.publish(self.preview())
+        data={'csrf_token':'bad','confirm':'true','account_id':123,'node':1259,'product_id':1358}
+        self.assertEqual(self.client.post('/imports/remove',data=data).status_code,403)
+        data.update(csrf_token='csrf',confirm='false')
+        self.assertEqual(self.client.post('/imports/remove',data=data).status_code,400)
+        data['confirm']='true';self.account.id=999
+        self.assertIn('Removal did not complete',self.client.post('/imports/remove',data=data).text)
+        self.account.delete_lot.assert_not_called()
+        with offer_stock.database() as db:self.assertEqual(db.execute('SELECT state FROM mappings').fetchone()['state'],'removal_error')
+
+    def test_remove_failure_preserves_delivery_and_can_retry(self):
+        from admin.services import offer_stock,delivery_mapping
+        self.account.session.post.return_value.json.return_value={'done':True,'offer_id':79665384}
+        self.publish(self.preview())
+        self.account.get_my_subcategory_lots.return_value=[SimpleNamespace(id=79665384)]
+        self.account.get_lot_fields.return_value=SimpleNamespace(lot_id=79665384,fields={'node_id':'1259'})
+        self.account.delete_lot.side_effect=TimeoutError()
+        data={'csrf_token':'csrf','confirm':'true','account_id':123,'node':1259,'product_id':1358}
+        self.assertIn('Removal did not complete',self.client.post('/imports/remove',data=data).text)
+        self.assertIn(self.product.title,delivery_mapping.read_configs()[0])
+        self.account.get_my_subcategory_lots.return_value=[]
+        self.account.delete_lot.side_effect=None
+        self.assertEqual(self.client.post('/imports/remove',data=data,follow_redirects=False).status_code,303)
+        self.assertEqual(offer_stock.mappings(),[])
+
     def test_lots_format_can_be_saved_edited_and_cleared(self):
         from admin.services.delivery_mapping import save_delivery_mapping, read_configs
         save_delivery_mapping('Existing','hstore','1358',True)

@@ -21,7 +21,7 @@ from admin.services.offer_import import (ImportFailure, fetch_product, make_acco
                                          prepare_offer, selling_price, submit_offer)
 from locales.localizer import Localizer
 from admin.services import offer_stock
-from admin.services.delivery_mapping import check_import_mapping, save_delivery_mapping, MappingConflict
+from admin.services.delivery_mapping import check_import_mapping, save_delivery_mapping, MappingConflict, remove_delivery_mappings
 from admin.routes.lots import restart_cardinal
 from urllib.parse import parse_qs, urlsplit
 
@@ -65,8 +65,8 @@ def csrf(token: str) -> None:
 
 
 @router.get("/")
-def import_page(request: Request, markup_saved: bool = False) -> Response:
-    return render(request, markup_saved=markup_saved)
+def import_page(request: Request, markup_saved: bool = False, removed: bool = False, restart_failed: bool = False) -> Response:
+    return render(request, markup_saved=markup_saved, removed=removed, restart_failed=restart_failed)
 
 
 @router.post("/preview")
@@ -214,3 +214,66 @@ def update_markup(request: Request, account_id: int = Form(...), node: int = For
         if result.rowcount != 1:
             raise HTTPException(status_code=404,detail='Mapping not found')
     return RedirectResponse('/imports/?markup_saved=true',status_code=303)
+
+
+@router.get('/remove')
+def remove_page(request: Request, account_id: int, node: int, product_id: int) -> Response:
+    with offer_stock.database() as db:
+        row=db.execute('SELECT * FROM mappings WHERE account=? AND node=? AND product=? AND state!=?',
+                       (account_id,node,product_id,'removed')).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404,detail='Mapping not found')
+    return render(request,remove_mapping=dict(row))
+
+
+@router.post('/remove')
+def remove_import(request: Request, account_id: int = Form(...), node: int = Form(...),
+                  product_id: int = Form(...), csrf_token: str = Form(''), confirm: bool = Form(False)) -> Response:
+    csrf(csrf_token)
+    if not confirm:
+        raise HTTPException(status_code=400,detail=Localizer().translate('oi_remove_confirm',language='en'))
+    identity=(account_id,node,product_id)
+    with offer_stock.database() as db:
+        row=db.execute('SELECT * FROM mappings WHERE account=? AND node=? AND product=?',identity).fetchone()
+        if row is None or row['state']=='removed':
+            return RedirectResponse('/imports/?removed=true',status_code=303)
+        mapping=dict(row)
+        db.execute("UPDATE mappings SET state='removing' WHERE account=? AND node=? AND product=?",identity)
+    try:
+        with offer_stock.action_lock(*identity):
+            with offer_stock.database() as db:
+                current=db.execute('SELECT state FROM mappings WHERE account=? AND node=? AND product=?',identity).fetchone()
+            if current is None or current['state']=='removed':
+                return RedirectResponse('/imports/?removed=true',status_code=303)
+            account=make_account()
+            if account.id!=account_id:
+                raise ValueError('Configured account differs from mapping')
+            offer_id=mapping['offer_id']
+            if not offer_id:
+                candidates=[lot for lot in account.get_my_subcategory_lots(node,locale='en') if lot.description==mapping['title']]
+                if len(candidates)!=1:
+                    raise ValueError('Offer identity is unresolved')
+                offer_id=int(candidates[0].id)
+            # Confirm this ID belongs to the configured account and category before deletion.
+            existing=account.get_my_subcategory_lots(node,locale='en')
+            if any(int(lot.id)==offer_id for lot in existing):
+                fields=account.get_lot_fields(offer_id)
+                if str(fields.fields.get('node_id'))!=str(node) or int(fields.lot_id)!=offer_id:
+                    raise ValueError('Offer identity mismatch')
+                account.delete_lot(offer_id)
+                if any(int(lot.id)==offer_id for lot in account.get_my_subcategory_lots(node,locale='en')):
+                    raise ValueError('Offer deletion not confirmed')
+            other_titles={m['title'] for m in offer_stock.mappings(account_id) if (m['account'],m['node'],m['product']) != identity}
+            remove_delivery_mappings(mapping['title'],product_id,other_titles)
+            with database() as db:
+                db.execute('DELETE FROM publications WHERE account=? AND node=? AND product=?',identity)
+            with offer_stock.database() as db:
+                db.execute("UPDATE mappings SET state='removed',last_error='' WHERE account=? AND node=? AND product=?",identity)
+            restarted=restart_cardinal()
+            return RedirectResponse('/imports/?removed=true'+('' if restarted else '&restart_failed=true'),status_code=303)
+    except Exception as exc:
+        logger.error('Imported offer removal failed (%s).',type(exc).__name__)
+        with offer_stock.database() as db:
+            db.execute("UPDATE mappings SET state='removal_error',last_error=? WHERE account=? AND node=? AND product=?",
+                       (type(exc).__name__,*identity))
+        return render(request,remove_mapping=mapping,error='oi_remove_failed')

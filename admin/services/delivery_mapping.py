@@ -122,3 +122,25 @@ def alias_delivery_mapping(old_title: str, new_title: str, product_id: int) -> N
             api[new_title] = dict(api[old_title])
         atomic_write(auto, AUTO_CFG)
         atomic_write(api, API_CFG)
+
+
+def remove_delivery_mappings(title: str, product_id: int, protected_titles: set[str]) -> None:
+    """Remove this offer's delivery aliases but preserve inventory and shared users."""
+    with _lock:
+        api,auto=read_configs()
+        filename=auto[title].get('productsFileName') if title in auto else None
+        candidates={title}
+        if filename:
+            candidates.update(name for name in auto.sections()
+                if auto[name].get('productsFileName')==filename and name in api
+                and api[name].get('provider')=='hstore' and api[name].get('product_id')==str(product_id))
+        if candidates & protected_titles:
+            return
+        for name in candidates:
+            if name in api and (api[name].get('provider')!='hstore' or api[name].get('product_id')!=str(product_id)):
+                continue
+            api.remove_section(name)
+            auto.remove_section(name)
+        atomic_write(auto,AUTO_CFG)
+        atomic_write(api,API_CFG)
+        # Purchased data is deliberately retained for pending orders/recovery.

@@ -3,3 +3,4 @@ __pycache__/
 *.py[cod]
 storage/cache/admin_sessions.sqlite3*
 storage/cache/offer_stock.sqlite3*
+storage/cache/offer_locks/

@@ -144,6 +144,14 @@ class StockMonitorTests(unittest.TestCase):
         stock.migrate_publications(123)
         self.assertIsNone(stock.mappings(123)[0]['offer_id'])
 
+    def test_removal_states_stop_monitor_actions(self):
+        for state in ['removing','removal_error','removed']:
+            with stock.database() as db:db.execute('UPDATE mappings SET state=?',(state,))
+            stock.check_stock(self.account)
+            stock.sync_metadata(self.account)
+        self.fetch_mock.assert_not_called()
+        self.account.save_lot.assert_not_called()
+
     def test_response_identifiers(self):
         self.assertEqual(stock.response_offer_id({'offer_id':79665384}),79665384)
         self.assertEqual(stock.response_offer_id({'url':'/en/lots/offerEdit?node=1259&offer=79665384'}),79665384)

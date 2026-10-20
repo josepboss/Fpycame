@@ -756,3 +756,21 @@ delivery_format_save = 'Save format'
 delivery_format_hint = 'Use field names with the seller’s exact separators: username, password, email, email_password, refresh_token, client_id, 2fa, auth_token, ct0. Without a format, complete M.C-prefixed fields of at least 100 characters are omitted by heuristic; other long data is preserved.'
 delivery_format_invalid = 'Invalid format. Use supported field names once each and separators such as ----, |, or :.'
 delivery_field_ct0 = 'CT0 token'
+
+oi_remove_action = 'Remove'
+
+oi_remove_heading = 'Remove offer and mappings'
+
+oi_remove_explanation = 'This deletes the FunPay listing, its stock-monitor link, and unshared delivery aliases. Pending orders will need manual attention. Purchased inventory files are retained for recovery.'
+
+oi_remove_confirm = 'I confirm removal of this offer and its mappings.'
+
+oi_removed = 'Offer and mappings removed. You can import this product again.'
+
+oi_remove_restart = 'Cardinal restart failed; restart funpay-cardinal to reload delivery settings.'
+
+oi_remove_failed = 'Removal did not complete. Monitoring is paused for this offer. Verify the configured account and offer link, then retry this removal.'
+
+oi_stock_removing = 'Removal in progress'
+
+oi_stock_removal_error = 'Removal incomplete; retry removal'

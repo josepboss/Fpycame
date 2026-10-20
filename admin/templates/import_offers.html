@@ -13,6 +13,22 @@
     <a href="{{ trade_url }}" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline">{{ _('oi_view') }}</a>
 </div>
 {% endif %}
+{% if removed %}<p class="bg-green-50 p-4 mb-6" role="status">{{ _('oi_removed') }}{% if restart_failed %} {{ _('oi_remove_restart') }}{% endif %}</p>{% endif %}
+{% if remove_mapping %}
+<section class="border border-red-300 rounded p-4 mb-6">
+    <h2 class="font-semibold">{{ _('oi_remove_heading') }}</h2>
+    <p class="my-2">{{ remove_mapping.title }} — HStore #{{ remove_mapping.product }} / FunPay #{{ remove_mapping.offer_id or '—' }}</p>
+    <p class="my-2">{{ _('oi_remove_explanation') }}</p>
+    <form action="/imports/remove" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="account_id" value="{{ remove_mapping.account }}">
+        <input type="hidden" name="node" value="{{ remove_mapping.node }}">
+        <input type="hidden" name="product_id" value="{{ remove_mapping.product }}">
+        <label class="block my-3"><input type="checkbox" name="confirm" value="true" required> {{ _('oi_remove_confirm') }}</label>
+        <button class="bg-red-700 text-white p-2 rounded">{{ _('oi_remove_heading') }}</button>
+    </form>
+</section>
+{% endif %}
 <form action="/imports/preview" method="post" class="flex flex-wrap gap-3 mb-8">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label class="flex-1 min-w-64">{{ _('oi_url') }}
@@ -97,7 +113,7 @@ document.getElementById('publishForm').addEventListener('submit', () => {
         </form>
     </details>
     <div class="overflow-x-auto"><table class="w-full text-left">
-        <thead><tr><th class="p-2">{{ _('oi_title') }}</th><th class="p-2">HStore</th><th class="p-2">FunPay</th><th class="p-2">{{ _('oi_available') }}</th><th class="p-2">{{ _('oi_stock_status') }}</th><th class="p-2">{{ _('oi_stock_checked') }}</th><th class="p-2">{{ _('oi_supplier_price') }}</th><th class="p-2">{{ _('oi_markup') }}</th></tr></thead>
+        <thead><tr><th class="p-2">{{ _('oi_title') }}</th><th class="p-2">HStore</th><th class="p-2">FunPay</th><th class="p-2">{{ _('oi_available') }}</th><th class="p-2">{{ _('oi_stock_status') }}</th><th class="p-2">{{ _('oi_stock_checked') }}</th><th class="p-2">{{ _('oi_supplier_price') }}</th><th class="p-2">{{ _('oi_markup') }}</th><th class="p-2">{{ _('oi_remove_action') }}</th></tr></thead>
         <tbody>{% for mapping in stock_mappings %}<tr class="border-t">
             <td class="p-2">{{ mapping.title }}</td>
             <td class="p-2"><a class="text-blue-700 underline" href="{{ mapping.source_url }}" target="_blank" rel="noopener">#{{ mapping.product }}</a></td>
@@ -114,6 +130,7 @@ document.getElementById('publishForm').addEventListener('submit', () => {
                 <input aria-label="{{ _('oi_markup') }}" type="number" name="markup" required min="0" max="100000" step="0.01" value="{{ mapping.markup if mapping.markup_confirmed else '' }}" class="border rounded p-1 w-24">
                 <button class="text-blue-700 underline">{{ _('oi_markup_save') }}</button>
             </form>{% if not mapping.markup_confirmed %}<span class="text-sm text-amber-700">{{ _('oi_markup_required') }}</span>{% endif %}</td>
+            <td class="p-2"><a class="text-red-700 underline" href="/imports/remove?account_id={{ mapping.account }}&amp;node={{ mapping.node }}&amp;product_id={{ mapping.product }}">{{ _('oi_remove_action') }}</a></td>
         </tr>{% endfor %}</tbody>
     </table></div>
 </section>

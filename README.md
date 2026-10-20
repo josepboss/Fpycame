@@ -310,3 +310,21 @@ chunking rather than delivering incorrectly labeled values.
 This is a formatting step only: the original supplier/stock data is unchanged.
 The prefix/length fallback is a heuristic, not a guarantee that a field is a refresh
 token; provide an explicit format whenever the seller's layout is known.
+
+
+## Removing an imported offer
+
+On **Imports**, click **Remove** beside the mapped offer. The confirmation page
+shows its title, supplier product ID, and FunPay offer ID. Confirming removes the
+FunPay listing, stops stock/title/price monitoring, and removes this offer's delivery
+aliases. Delivery mappings shared by another tracked offer are retained, and purchased
+inventory files are kept for recovery. Handle pending orders before removing their
+mapping.
+
+Removal verifies the configured FunPay account/category and confirms the remote offer
+is absent before deleting local delivery settings. If the remote offer was already
+deleted, the local mapping can still be cleaned up. Failure leaves monitoring paused
+and provides a retry form; do not re-import until cleanup succeeds. The removal record
+prevents the migration task from restoring the offer, while clearing the old publication
+guard allows a fresh import later. Cardinal is restarted automatically after cleanup.
+No existing offer is removed merely by deploying this feature.
