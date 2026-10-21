@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from Utils.delivery_tools import format_products, account_fields, format_spec, remove_refresh_hints
+from Utils.delivery_tools import format_products, account_fields, format_spec, remove_refresh_hints, split_rejected_text
 from locales.localizer import Localizer
 
 
@@ -166,7 +166,104 @@ class LongDeliveryTests(unittest.TestCase):
             deliver_goods(c,event)
         self.assertTrue(event.delivered)
         sent='\n'.join(call.args[1] for call in c.account.send_message.call_args_list)
-        self.assertEqual(reconstruct(sent),[record])
+        self.assertIn(record,sent)
+        self.assertNotIn("Part 1/",sent)
+        self.assertEqual(c.account.send_message.call_count,1)
+
+    def dispatcher(self):
+        from cardinal import Cardinal
+        c=object.__new__(Cardinal)
+        c.MAIN_CFG=configparser.ConfigParser()
+        c.MAIN_CFG['Other']={'watermark':''}
+        c.MAIN_CFG['FunPay']={'oldMsgGetMode':'0','keepSentMessagesUnread':'0'}
+        c.account=Mock()
+        return c
+
+    def rejection(self):
+        error=RuntimeError('Synthetic rejection')
+        error.error_message='A word with an excessive number of characters found.'
+        return error
+
+    def test_unsplit_first_preserves_accepted_long_records(self):
+        records=['user----password----'+('A'*100), 'second----'+('B'*110)]
+        text,_=format_products(records,translate,split_long=False)
+        c=self.dispatcher()
+        self.assertTrue(c.send_message(123,text,literal=True,
+            long_word_fallback=lambda value:split_rejected_text(value,translate)))
+        self.assertEqual(c.account.send_message.call_count,1)
+        self.assertEqual(c.account.send_message.call_args.args[1], '\n'.join(records))
+
+    def test_rejection_splits_only_long_individual_value(self):
+        record='user----password----'+('A'*300)+'|short_auth'
+        c=self.dispatcher()
+        c.account.send_message.side_effect=[self.rejection(),Mock()]
+        self.assertTrue(c.send_message(123,record,literal=True,
+            long_word_fallback=lambda value:split_rejected_text(value,translate)))
+        sent=[call.args[1] for call in c.account.send_message.call_args_list]
+        self.assertEqual(sent[0],record)
+        self.assertIn('user ---- password ----',sent[1])
+        self.assertIn('| short_auth',sent[1])
+        pieces=re.findall(r'^Long value 1 / Part \d+/\d+: \[(.*)\]$',sent[1],re.M)
+        self.assertEqual(''.join(pieces),'A'*300)
+        self.assertNotIn('[user',sent[1])
+
+    def test_rejection_of_long_record_only_separates_short_values(self):
+        record='----'.join(['user','password','A'*70,'B'*60])
+        output=split_rejected_text(record,translate)
+        self.assertIn('user ---- password ---- '+('A'*70)+' ---- '+('B'*60),output)
+        self.assertNotIn('Part 1/',output)
+
+    def test_timeout_and_other_errors_do_not_resend(self):
+        for error in [TimeoutError('synthetic'),RuntimeError('other validation')]:
+            c=self.dispatcher()
+            c.account.send_message.side_effect=error
+            self.assertFalse(c.send_message(123,'A'*200,literal=True,
+                long_word_fallback=lambda value:split_rejected_text(value,translate)))
+            self.assertEqual(c.account.send_message.call_count,1)
+
+    def test_fallback_failure_stops_without_retrying(self):
+        c=self.dispatcher()
+        c.account.send_message.side_effect=[self.rejection(),TimeoutError('synthetic')]
+        self.assertFalse(c.send_message(123,'A'*200,literal=True,
+            long_word_fallback=lambda value:split_rejected_text(value,translate)))
+        self.assertEqual(c.account.send_message.call_count,2)
+
+    def test_earlier_successful_message_is_not_resent(self):
+        c=self.dispatcher()
+        c.account.send_message.side_effect=[Mock(),self.rejection(),Mock()]
+        lines=['short']*20+['A'*200]
+        self.assertTrue(c.send_message(123,'\n'.join(lines),literal=True,
+            long_word_fallback=lambda value:split_rejected_text(value,translate)))
+        sent=[call.args[1] for call in c.account.send_message.call_args_list]
+        self.assertEqual(len(sent),3)
+        self.assertEqual(sent[0].count('short'),20)
+        self.assertNotIn('short',sent[2])
+
+    def test_schema_preserves_long_auth_until_funpay_rejects_it(self):
+        auth='A'*200
+        text,_=format_products(['user|pass|M.C'+('X'*150)+'|'+auth],translate,
+            'username|password|refresh_token|auth_token',split_long=False)
+        self.assertIn('Username: user',text)
+        self.assertIn('Auth token: '+auth,text)
+        self.assertNotIn('M.C',text)
+        self.assertNotIn('Part 1/',text)
+        fallback=split_rejected_text(text,translate)
+        self.assertIn('Password: pass',fallback)
+        chunks=re.findall(r'^Long value 1 / Part \d+/\d+: \[(.*)\]$',fallback,re.M)
+        self.assertEqual(''.join(chunks),auth)
+
+    def test_transport_does_not_retry_post_after_ambiguous_failure(self):
+        from FunPayAPI.account import Account
+        account=Account('synthetic-test-key')
+        retries=account.session.get_adapter('https://funpay.com').max_retries
+        self.assertFalse(retries.is_retry('POST',503))
+        self.assertTrue(retries.is_retry('GET',503))
+        account.session.close()
+
+    def test_cleaned_initial_delivery_removes_only_refresh_token(self):
+        record='user|password|M.C'+('X'*150)+'|'+('A'*120)
+        text,_=format_products([record],translate,split_long=False)
+        self.assertEqual(text,'user|password||'+('A'*120))
 
     def test_hstore_stock_retains_complete_original_data(self):
         import plugins.api_delivery as plugin

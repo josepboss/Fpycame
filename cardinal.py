@@ -448,7 +448,8 @@ class Cardinal(object):
 
     def send_message(self, chat_id: int | str, message_text: str, chat_name: str | None = None,
                      interlocutor_id: int | None = None, attempts: int = 3,
-                     watermark: bool = True, literal: bool = False) -> list[FunPayAPI.types.Message] | None:
+                     watermark: bool = True, literal: bool = False,
+                     long_word_fallback: Callable[[str], str] | None = None) -> list[FunPayAPI.types.Message] | None:
         """
         Отправляет сообщение в чат FunPay.
 
@@ -494,6 +495,21 @@ class Cardinal(object):
                         time.sleep(entity)
                     break
                 except Exception as ex:
+                    if long_word_fallback is not None:
+                        from Utils.delivery_tools import is_long_word_rejection
+                        if isinstance(entity,str) and is_long_word_rejection(ex):
+                            replacement=long_word_fallback(entity)
+                            if replacement!=entity:
+                                fallback=self.send_message(chat_id,replacement,chat_name,interlocutor_id,
+                                    attempts=1,watermark=False,literal=True,
+                                    long_word_fallback=lambda value: value)
+                                if not fallback:
+                                    return []
+                                result.extend(fallback)
+                                break
+                        # An unknown outcome must not cause a new-format resend.
+                        logger.warning('Delivery message failed (%s).',type(ex).__name__)
+                        return []
                     logger.warning(_("crd_msg_send_err", chat_id))
                     logger.debug("TRACEBACK", exc_info=True)
                     logger.info(_("crd_msg_attempts_left", current_attempts))

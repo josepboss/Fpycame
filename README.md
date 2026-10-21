@@ -246,13 +246,16 @@ auth token, and email client ID. The recognized email refresh-token field is omi
 from buyer messages at the operator’s request; the original supplier/stock record
 retains it. With no configured format, a delimiter-bounded field beginning with `M.C`
 and at least 100 characters long is omitted from buyer delivery using the
-operator-requested heuristic. Other long fields are retained. Only long individual fields
-are split into bracketed parts of at most 64 characters; each part repeats its
-product number and field name. Unsupported field layouts are not assigned guessed labels: after the token
-heuristic, remaining long records use complete-record chunking. Buyers join the content inside the outer brackets in order, without
-adding spaces or newlines. Unrecognized short product records keep their existing format.
+operator-requested heuristic. Other long fields are retained. Delivery first sends
+cleaned credentials intact. Only an explicit FunPay long-word rejection triggers
+formatting of the rejected message: delimiter-separated short values stay whole,
+and individual values over 80 characters use numbered bracketed parts of up to
+64 characters. Buyers join only those parts without adding spaces or newlines.
+An accepted message is never resent during this fallback; ambiguous failures such
+as timeouts do not trigger an automatic resend. HTTP POST requests are also excluded
+from automatic transport retries.
 
-Chunked delivery uses plain-text mode, so strings resembling `$photo` or `$sleep`
+All delivery uses plain-text mode, so strings resembling `$photo` or `$sleep`
 inside credentials are not interpreted as commands. Messages still follow Cardinal's
 20-line splitting. Raw HStore credentials are no longer written to the plugin log.
 Previously shortened stock records are not repaired by this change; recover the

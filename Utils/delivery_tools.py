@@ -72,25 +72,28 @@ def remove_refresh_hints(product: str) -> str:
     return re.sub(pattern,lambda match: match[1],product)
 
 
-def format_products(products: list[str], translate: Callable[..., str], delivery_format: str = '') -> tuple[str, bool]:
+def format_products(products: list[str], translate: Callable[..., str], delivery_format: str = '', split_long: bool = True) -> tuple[str, bool]:
     """Use an optional per-offer schema; otherwise apply the requested token hint."""
     if delivery_format:
         format_spec(delivery_format)
     structured = [configured_fields(product,delivery_format) if delivery_format else account_fields(product) for product in products]
     cleaned = [product if fields is not None else remove_refresh_hints(product) for product,fields in zip(products,structured)]
     altered = cleaned != products
-    if not any(structured) and not any(LONG_WORD.search(product) for product in cleaned):
+    if not any(structured) and (not split_long or not any(LONG_WORD.search(product) for product in cleaned)):
         return '\n'.join(cleaned), altered
     records = []
-    if any(structured):
+    if split_long and any(structured):
         records.append(translate('delivery_field_instructions'))
-    if any(fields is None for fields in structured):
+    if split_long and any(fields is None for fields in structured):
         records.append(translate('delivery_chunk_instructions'))
     for number, (product, fields) in enumerate(zip(cleaned, structured), 1):
         if '\n' in product or '\r' in product:
             raise ValueError('Product record must be a single line')
         records.append(translate('delivery_chunk_product', number))
         if fields is None:
+            if not split_long:
+                records.append(product)
+                continue
             pieces = [product[i:i + CHUNK_SIZE] for i in range(0, len(product), CHUNK_SIZE)]
             for index, piece in enumerate(pieces, 1):
                 records.append(translate('delivery_chunk_part', index, len(pieces)) + f' [{piece}]')
@@ -99,10 +102,47 @@ def format_products(products: list[str], translate: Callable[..., str], delivery
             if key == 'delivery_field_refresh':
                 continue
             label = translate(key)
-            if len(value) <= CHUNK_SIZE and value == value.strip():
+            if (not split_long) or (len(value) <= CHUNK_SIZE and value == value.strip()):
                 records.append(f'{label}: {value}')
             else:
                 pieces = [value[i:i + CHUNK_SIZE] for i in range(0, len(value), CHUNK_SIZE)]
                 for index, piece in enumerate(pieces, 1):
                     records.append(translate('delivery_field_part', number, label, index, len(pieces)) + f' [{piece}]')
     return '\n'.join(records), True
+
+
+LONG_WORD_ERRORS = {
+    'a word with an excessive number of characters found.',
+    'обнаружено слово со слишком большим количеством символов.',
+    'знайдено слово із завеликою кількістю символів.',
+}
+
+
+def is_long_word_rejection(error: Exception) -> bool:
+    message=getattr(error,'error_message',None)
+    return isinstance(message,str) and message.strip().casefold() in LONG_WORD_ERRORS
+
+
+def split_rejected_text(text: str, translate: Callable[...,str]) -> str:
+    """After an explicit rejection, separate delimiters and split only long values."""
+    count=0
+    def replace(match: re.Match) -> str:
+        nonlocal count
+        # Separators are preserved, making short username/password/etc readable
+        # without splitting those credentials merely because a record is long.
+        pieces=re.split(r'(----|[|:;])',match[0])
+        result=[]
+        for piece in pieces:
+            if len(piece)<=80:
+                result.append(piece)
+                continue
+            count+=1
+            chunks=[piece[i:i+CHUNK_SIZE] for i in range(0,len(piece),CHUNK_SIZE)]
+            result.append('\n'+'\n'.join(
+                translate('delivery_rejected_part',count,index,len(chunks))+f' [{chunk}]'
+                for index,chunk in enumerate(chunks,1))+'\n')
+        return ' '.join(result)
+    output=LONG_WORD.sub(replace,text)
+    if output==text:
+        return text
+    return translate('delivery_rejected_instructions')+'\n'+output

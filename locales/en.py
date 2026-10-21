@@ -774,3 +774,7 @@ oi_remove_failed = 'Removal did not complete. Monitoring is paused for this offe
 oi_stock_removing = 'Removal in progress'
 
 oi_stock_removal_error = 'Removal incomplete; retry removal'
+
+delivery_rejected_instructions = 'Fields are separated below. If a value has numbered parts, join its bracketed parts in order without added spaces. Spaces around ----, |, : and ; separate fields for readability; they are not part of the credentials.'
+
+delivery_rejected_part = 'Long value {} / Part {}/{}:'
