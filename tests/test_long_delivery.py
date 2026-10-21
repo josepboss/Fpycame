@@ -265,6 +265,39 @@ class LongDeliveryTests(unittest.TestCase):
         text,_=format_products([record],translate,split_long=False)
         self.assertEqual(text,'user|password||'+('A'*120))
 
+    def test_rejected_nine_records_fallback_is_batched_by_total_size(self):
+        # Same shape as ZKUGN216: short fields form long words, and adding
+        # fallback instructions pushes the full nine-record message over 2000.
+        records=['|'.join([str(n)+'A'*59,'B'*60,'C'*60]) for n in range(9)]
+        text='Your purchased accounts: '+('X'*40)+'\n'+'\n'.join(records)
+        c=self.dispatcher()
+        accepted=[]
+        calls=0
+        def send(chat,body,*args):
+            nonlocal calls
+            calls+=1
+            if calls==1:
+                raise self.rejection()
+            if len(body.encode('utf-16-le'))//2 > 1800:
+                raise RuntimeError('Synthetic message size rejection')
+            accepted.append(body)
+            return Mock()
+        c.account.send_message.side_effect=send
+        self.assertTrue(c.send_message(123,text,literal=True,
+            long_word_fallback=lambda value:split_rejected_text(value,translate)))
+        self.assertGreater(len(accepted),1)
+        combined='\n'.join(accepted)
+        for record in records:
+            self.assertIn(record.replace('|',' | '),combined)
+
+    def test_message_batching_keeps_lines_and_unicode_intact(self):
+        from cardinal import Cardinal
+        lines=['😀'*100 for _ in range(19)]
+        pieces=Cardinal.split_text('\n'.join(lines))
+        self.assertEqual('\n'.join(pieces),'\n'.join(lines))
+        self.assertTrue(all(len(p.encode('utf-16-le'))//2<=1800 for p in pieces))
+        self.assertEqual(Cardinal.split_text('A'*2001),['A'*2001])
+
     def test_hstore_stock_retains_complete_original_data(self):
         import plugins.api_delivery as plugin
         with tempfile.TemporaryDirectory() as folder:

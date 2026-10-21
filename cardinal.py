@@ -400,20 +400,27 @@ class Cardinal(object):
 
     @staticmethod
     def split_text(text: str) -> list[str]:
-        """
-        Разбивает текст на суб-тексты по 20 строк.
+        """Batch at line boundaries, keeping both line count and size bounded.
 
-        :param text: исходный текст.
-
-        :return: список из суб-текстов.
+        Keep an oversized single line intact: delivery's explicit long-word
+        rejection fallback handles that value without silently cutting it.
+        The size budget includes headroom for FunPay's bot marker/encoding.
         """
-        output = []
-        lines = text.split("\n")
-        while lines:
-            subtext = "\n".join(lines[:20])
-            del lines[:20]
-            if (strip := subtext.strip()) and strip != "[a][/a]":
-                output.append(subtext)
+        output: list[str] = []
+        batch: list[str] = []
+        units = 0
+        for line in text.split("\n"):
+            size = len(line.encode('utf-16-le')) // 2
+            if batch and (len(batch) >= 20 or units + 1 + size > 1800):
+                subtext = "\n".join(batch)
+                if subtext.strip() and subtext.strip() != "[a][/a]":
+                    output.append(subtext)
+                batch, units = [], 0
+            units += size + (1 if batch else 0)
+            batch.append(line)
+        subtext = "\n".join(batch)
+        if subtext.strip() and subtext.strip() != "[a][/a]":
+            output.append(subtext)
         return output
 
     def parse_message_entities(self, msg_text: str) -> list[str | int | float]:
