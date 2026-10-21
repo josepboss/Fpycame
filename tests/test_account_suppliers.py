@@ -285,3 +285,13 @@ class SupplierTests(unittest.TestCase):
             self.assertEqual(json.loads(cfg.read_text())['djekxa']['credentials'][0]['api_key'],'updated-djekxa')
         finally:
             app.dependency_overrides.clear()
+
+    def test_djekxa_current_cdn_downloads_without_broadening_host_access(self):
+        with patch.object(accounts,'get_credentials',return_value=[{'api_key':'synthetic'}]):
+            client=accounts.AccountSupplier('djekxa')
+        response=Mock(status_code=200,headers={'Content-Type':'text/plain'},content=b'demo|password\n')
+        with patch.object(accounts.requests,'get',return_value=response) as get:
+            self.assertEqual(client.download('https://cdn2gtdks.click/sold/demo.txt'),['demo|password'])
+            self.assertFalse(get.call_args.kwargs['allow_redirects'])
+        for url in ['https://cdn2gtdks.click.evil.test/private','https://cdn2gtdks.click@localhost/private']:
+            with self.assertRaises(accounts.SupplierReview):client.download(url)

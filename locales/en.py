@@ -792,3 +792,15 @@ oi_supplier = 'Supplier'
 oi_supplier_delivery_review = 'Supplier delivery needs checking. Check the saved supplier order before retrying; do not purchase again.'
 
 oi_minimum_product = 'This supplier requires a bulk minimum order. Automatic single-unit FunPay offers are not supported for this product.'
+
+smm_started = '🚀 Boosting started! Quantity: {}. This service may take several hours. We will confirm when it finishes.'
+
+smm_placement_verifying = '⏳ Your request was received. We are verifying confirmation with the provider. You do not need to resubmit it.'
+
+smm_start_failed = '⚠️ The provider could not start this service. Please contact support.'
+
+smm_completed = '✅ Order completed! Quantity: {}. SMM Order ID: #{}'
+
+smm_partial = 'ℹ️ Partial delivery: {}/{}. SMM Order ID: #{}. Please contact support for the remaining quantity.'
+
+smm_service_failed = '⚠️ The provider reports that this service was cancelled or failed. Please contact support.'

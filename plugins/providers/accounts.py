@@ -87,7 +87,7 @@ class AccountSupplier:
 
     def download(self, url: str) -> list[str]:
         parts = urlsplit(url)
-        hosts = (*DOMAINS[self.name], 'cdn.djekxa.biz') if self.name == 'djekxa' else DOMAINS[self.name]
+        hosts = (*DOMAINS[self.name], 'cdn.djekxa.biz', 'cdn2gtdks.click') if self.name == 'djekxa' else DOMAINS[self.name]
         if parts.scheme != 'https' or parts.netloc not in hosts:
             raise SupplierReview('Unexpected supplier download host')
         try:

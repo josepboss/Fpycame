@@ -196,84 +196,13 @@ def smmcost_request(params: Dict) -> Optional[requests.Response]:
 
 
 def _on_confirmed(buyer: str, session: Dict):
-    """Place order on SMMCost and poll until completion."""
-    crd = session["cardinal"]
-    order = session["order"]
-    lot_cfg = get_delivery_config()
-    lot_name = session["lot_name"]
-    qty = session["quantity"]
-    link = session["candidate"]
-
-    crd.send_message(order.chat_id,
-                     f"🚀 Boosting started!\nQuantity: {qty}\nUsername: {link}\nWe'll confirm when done.",
-                     order.buyer_username)
-
-    def worker():
-        service_id = lot_cfg[lot_name].get("service_id", "")
-        if not service_id:
-            crd.send_message(order.chat_id, "⚠️ Error processing order. Please contact support.",
-                             order.buyer_username)
-            return
-
-        # Place order
-        params = {
-            "action": "add",
-            "service": service_id,
-            "link": link,
-            "quantity": qty,
-        }
-        resp = smmcost_request(params)
-        if not resp or resp.status_code != 200:
-            crd.send_message(order.chat_id, "⚠️ Error placing order. Please contact support.",
-                             order.buyer_username)
-            return
-
-        try:
-            data = resp.json()
-            smm_order_id = data.get("order")
-            if not smm_order_id:
-                crd.send_message(order.chat_id, "⚠️ Error placing order. Please contact support.",
-                                 order.buyer_username)
-                return
-        except (json.JSONDecodeError, KeyError):
-            crd.send_message(order.chat_id, "⚠️ Error processing order. Please contact support.",
-                             order.buyer_username)
-            return
-
-        # Poll status
-        start_time = time.time()
-        while time.time() - start_time < 600:
-            time.sleep(15)
-            status_resp = smmcost_request({"action": "status", "order": smm_order_id})
-            if not status_resp or status_resp.status_code != 200:
-                continue
-            try:
-                status_data = status_resp.json()
-                status = status_data.get("status", "")
-                if status == "Completed":
-                    crd.send_message(order.chat_id,
-                                     f"✅ Order completed!\nQuantity: {qty}\nSMM Order ID: #{smm_order_id}",
-                                     order.buyer_username)
-                    return
-                elif status == "Partial":
-                    remains = status_data.get("remains", "0")
-                    delivered = qty - int(remains)
-                    crd.send_message(order.chat_id,
-                                     f"✅ Partial delivery\nDelivered: {delivered}/{qty}\nSMM Order ID: #{smm_order_id}",
-                                     order.buyer_username)
-                    return
-                elif status in ("Canceled", "Error"):
-                    crd.send_message(order.chat_id,
-                                     "⚠️ Error processing order. Please contact support.",
-                                     order.buyer_username)
-                    return
-            except (json.JSONDecodeError, KeyError):
-                continue
-
-        crd.send_message(order.chat_id, "⚠️ Order processing timed out. Please contact support.",
-                         order.buyer_username)
-
-    threading.Thread(target=worker, daemon=True).start()
+    """Submit once; monitor service progress persistently for as long as needed."""
+    from plugins.providers.smm_orders import place
+    cfg = get_delivery_config()
+    lot_name = session['lot_name']
+    service_id = cfg[lot_name].get('service_id', '') if lot_name in cfg else ''
+    threading.Thread(target=place, args=(session['cardinal'], session['order'], service_id,
+        session['quantity'], session['candidate'], smmcost_request), daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +211,8 @@ def _on_confirmed(buyer: str, session: Dict):
 
 def post_init_handler(crd: Cardinal):
     init_configs()
+    from plugins.providers.smm_orders import start_monitor
+    start_monitor(crd, smmcost_request, lambda: UUID in crd.plugins and crd.plugins[UUID].enabled)
     def resume_loop() -> None:
         from plugins.providers.fulfillment import resume_pending
         while True:

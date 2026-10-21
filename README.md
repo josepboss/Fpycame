@@ -361,3 +361,16 @@ the shared refresh-token cleanup and unsplit-first delivery formatting.
 API references: [Djekxa](https://djekxa.ru/docs) and
 [Dark Shopping](https://dark.shopping/developer). Live purchasing requires configured
 API access and funded supplier balances.
+
+## Long-running SMMCost services
+
+Boosting orders have no ten-minute completion deadline. Accepted SMMCost order IDs
+are saved in `storage/cache/smm_orders.sqlite3`; Cardinal checks every two minutes
+and resumes monitoring after restart, even when delivery takes hours or days.
+Pending/in-progress states and transient API errors do not send failure messages.
+Completion, partial delivery and explicit cancellation/failure receive distinct
+buyer notifications. “Boosting started” is sent only after the provider returns an
+order ID. A lost/invalid creation response sends a neutral verification message
+and requires operator review; the bot never blindly places the order again.
+Historical orders created before this persistence change are not automatically
+recovered because their provider order IDs were only held in memory.
