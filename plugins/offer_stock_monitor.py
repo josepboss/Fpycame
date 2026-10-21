@@ -1,4 +1,4 @@
-"""Monitor imported HStore products in Cardinal's existing background process."""
+"""Monitor imported supplier products in Cardinal's existing background process."""
 from __future__ import annotations
 
 import logging
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 NAME = "Imported Offer Stock Monitor"
 VERSION = "1.0.0"
-DESCRIPTION = "Sync HStore stock, titles, and prices while preserving delivery mappings."
+DESCRIPTION = "Sync supplier stock, titles, and prices while preserving delivery mappings."
 CREDITS = "Cardinal"
 UUID = "80921053-5ce8-4c4f-b782-80dff7af45c4"
 SETTINGS_PAGE = False

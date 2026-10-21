@@ -645,9 +645,9 @@ crd_tg_au_err = "Failed to update the message with user information: {}. I will 
 
 
 # Web admin: HStore offer import
-oi_heading = 'Import from HStore'
-oi_intro = 'Fetch a product, choose your markup, then publish an offer on FunPay.'
-oi_url = 'HStore product URL'
+oi_heading = 'Import account offers'
+oi_intro = 'Import account products from HStore, Djekxa or Darkstore, choose your markup, then publish on FunPay.'
+oi_url = 'Supplier product URL'
 oi_fetch = 'Import preview'
 oi_cost = 'Supplier unit price:'
 oi_available = 'Supplier stock:'
@@ -658,15 +658,15 @@ oi_category_hint = '1259 = Twitter (X) Accounts. Use the number from /lots/NUMBE
 oi_quantity = 'Quantity to list'
 oi_markup = 'Markup (%)'
 oi_price = 'FunPay unit price:'
-oi_price_hint = 'Supplier price × (1 + markup / 100), rounded up to cents. FunPay fees are not included; this is not a net-profit calculation. USD accounts only.'
-oi_delivery_hint = 'Publishing also adds an enabled HStore delivery mapping in Lots and restarts Cardinal to load it. Products are purchased by your existing API Delivery plugin when paid orders arrive. English source text is copied to both language fields.'
+oi_price_hint = 'Supplier price converted to USD, then markup applied and rounded up to cents. FunPay fees are not included.'
+oi_delivery_hint = 'Publishing creates the delivery mapping in Lots and restarts Cardinal. The API Delivery plugin purchases products for paid orders. Your optional delivery format still applies.'
 oi_publish = 'Publish to FunPay'
 oi_success = 'Offer published successfully.'
 oi_view = 'View your FunPay offers'
-oi_bad_url = 'Use an HTTPS product link on hstora.com/en/product/... without query parameters.'
+oi_bad_url = 'Use an HTTPS product link from HStore, Djekxa or Darkstore without query parameters.'
 oi_bad_product = 'Product details could not be read. HStore may have changed its page format.'
-oi_currency = 'Import requires USD prices on both HStore and FunPay. Currency conversion is not configured.'
-oi_fetch_failed = 'Could not fetch HStore. Try again later.'
+oi_currency = 'The FunPay offer editor must use USD. Other supplier currencies need a supported conversion.'
+oi_fetch_failed = 'Could not fetch the supplier product. Check provider credentials and try again.'
 oi_bad_markup = 'Enter a markup between 0 and 100000 percent.'
 oi_no_account = 'Configure your FunPay golden_key in Settings first.'
 oi_proxy = 'Configure the enabled FunPay proxy before publishing.'
@@ -701,7 +701,7 @@ oi_republish_deleted = 'I deleted the previous offer from FunPay and want to rep
 
 # Imported offer stock monitoring
 oi_stock_heading = 'Supplier stock monitoring'
-oi_stock_hint = 'New imports stay linked to their HStore product. The Cardinal stock monitor checks every 60 seconds and deactivates the linked FunPay offer at zero stock. Failed checks leave the offer unchanged. Offers paused by the monitor reactivate when stock returns; manually disabled offers stay disabled.'
+oi_stock_hint = 'New imports stay linked to their supplier product. The Cardinal stock monitor checks every 60 seconds and deactivates the linked FunPay offer at zero stock. Failed checks leave the offer unchanged. Offers paused by the monitor reactivate when stock returns; manually disabled offers stay disabled.'
 oi_track_existing = 'Link an existing FunPay offer'
 oi_offer_link = 'FunPay offer edit link (with node and offer IDs)'
 oi_save_mapping = 'Save stock mapping'
@@ -778,3 +778,17 @@ oi_stock_removal_error = 'Removal incomplete; retry removal'
 delivery_rejected_instructions = 'Fields are separated below. If a value has numbered parts, join its bracketed parts in order without added spaces. Spaces around ----, |, : and ; separate fields for readability; they are not part of the credentials.'
 
 delivery_rejected_part = 'Long value {} / Part {}/{}:'
+
+oi_provider_key = 'Add this supplier’s API key in Providers before importing or delivering.'
+
+oi_manual_product = 'This product requires manual supplier delivery and cannot be imported for automatic delivery.'
+
+oi_exchange_rate = 'Exchange rate: RUB for 1 USD (saved for price monitoring)'
+
+oi_exchange_label = 'RUB for 1 USD'
+
+oi_supplier = 'Supplier'
+
+oi_supplier_delivery_review = 'Supplier delivery needs checking. Check the saved supplier order before retrying; do not purchase again.'
+
+oi_minimum_product = 'This supplier requires a bulk minimum order. Automatic single-unit FunPay offers are not supported for this product.'

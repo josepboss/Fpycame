@@ -85,43 +85,32 @@ async def provider_dashboard(request: Request):
 
 
 @router.post("/save_api_keys")
-async def save_api_keys(
-    hstore_key: str = Form(""),
-    hstore_secret: str = Form(""),
-    dark_key: str = Form(""),
-    djekxa_key: str = Form(""),
-):
+async def save_api_keys(request: Request) -> RedirectResponse:
+    # Each provider card submits only its own fields. Preserve every omitted key.
+    form = await request.form()
     cfg = _load_json(PROVIDERS_CFG)
-
-    # Update providers_cfg.json credentials
-    for provider_name, key_field, secret_field in [
-        ("hstore", "api_key", "api_secret"),
-        ("dark", "api_key", None),
-        ("djekxa", "api_key", None),
-    ]:
-        if provider_name not in cfg:
-            cfg[provider_name] = {}
-        creds = {}
-        if key_field:
-            val = locals().get(f"{provider_name}_key", "")
-            if val:
-                creds[key_field] = val
-        if secret_field:
-            val = locals().get(f"{provider_name}_secret", "")
-            if val:
-                creds[secret_field] = val
-        cfg[provider_name]["credentials"] = [creds] if creds else []
-    _save_json(PROVIDERS_CFG, cfg)
-
-    # Also update api_keys.cfg for backward compatibility
     api_cfg = configparser.ConfigParser(interpolation=None)
-    api_cfg["hstore"] = {"api_key": hstore_key, "api_secret": hstore_secret}
-    api_cfg["dark"] = {"api_key": dark_key}
-    api_cfg["djekxa"] = {"api_key": djekxa_key}
-    with open(API_KEYS_CFG, "w", encoding="utf-8") as f:
-        api_cfg.write(f)
-
-    return RedirectResponse(url="/providers", status_code=303)
+    api_cfg.read(API_KEYS_CFG, encoding='utf-8')
+    for name in ('hstore', 'dark', 'djekxa', 'smmcost'):
+        fields = [('api_key', f'{name}_key')]
+        if name == 'hstore':
+            fields.append(('api_secret', 'hstore_secret'))
+        if not any(field in form for _, field in fields):
+            continue
+        pc = cfg.setdefault(name, {})
+        credentials = pc.get('credentials', [])
+        creds = dict(credentials[0]) if credentials else {}
+        if name not in api_cfg:
+            api_cfg.add_section(name)
+        for key, field in fields:
+            if field in form:
+                creds[key] = str(form[field]).strip()
+                api_cfg[name][key] = creds[key]
+        pc['credentials'] = [creds] + credentials[1:]
+    _save_json(PROVIDERS_CFG, cfg)
+    with open(API_KEYS_CFG, 'w', encoding='utf-8') as stream:
+        api_cfg.write(stream)
+    return RedirectResponse(url='/providers', status_code=303)
 
 
 @router.post("/switch_domain")
@@ -180,11 +169,10 @@ async def run_health():
 @router.post("/run_offer_check")
 async def run_offer_check():
     try:
-        from cardinal import Cardinal
-        crd = Cardinal()
-        from plugins.providers.offer_monitor import OfferMonitor
-        om = OfferMonitor(crd)
-        changes = om.refresh()
-        return JSONResponse({"status": "done", "changes": len(changes)})
+        from admin.services.offer_import import make_account
+        from admin.services.offer_stock import check_stock, mappings
+        account = make_account()
+        check_stock(account)
+        return JSONResponse({"status": "done", "changes": len(mappings(account.id))})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)

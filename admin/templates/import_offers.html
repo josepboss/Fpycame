@@ -17,13 +17,14 @@
 {% if remove_mapping %}
 <section class="border border-red-300 rounded p-4 mb-6">
     <h2 class="font-semibold">{{ _('oi_remove_heading') }}</h2>
-    <p class="my-2">{{ remove_mapping.title }} — HStore #{{ remove_mapping.product }} / FunPay #{{ remove_mapping.offer_id or '—' }}</p>
+    <p class="my-2">{{ remove_mapping.title }} — {{ remove_mapping.provider }} #{{ remove_mapping.product }} / FunPay #{{ remove_mapping.offer_id or '—' }}</p>
     <p class="my-2">{{ _('oi_remove_explanation') }}</p>
     <form action="/imports/remove" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="account_id" value="{{ remove_mapping.account }}">
         <input type="hidden" name="node" value="{{ remove_mapping.node }}">
         <input type="hidden" name="product_id" value="{{ remove_mapping.product }}">
+        <input type="hidden" name="provider" value="{{ remove_mapping.provider }}">
         <label class="block my-3"><input type="checkbox" name="confirm" value="true" required> {{ _('oi_remove_confirm') }}</label>
         <button class="bg-red-700 text-white p-2 rounded">{{ _('oi_remove_heading') }}</button>
     </form>
@@ -39,9 +40,10 @@
 {% if product %}
 {% set v = values or {} %}
 <div class="bg-gray-50 border rounded p-4 mb-5 flex flex-wrap gap-8">
-    <p>{{ _('oi_cost') }} <strong>${{ product.price }} USD</strong></p>
+    <p>{{ _('oi_cost') }} <strong>{{ product.price }} {{ product.currency }}</strong></p>
     <p>{{ _('oi_available') }} <strong>{{ product.stock }}</strong></p>
-    <p>HStore #{{ product.product_id }}</p>
+    <p>{{ product.provider or "hstore" }} #{{ product.product_id }}</p>
+    {% if (product.minimum_order or 1) > 1 %}<p role="alert" class="text-amber-800">{{ _('oi_minimum_product') }}</p>{% endif %}
 </div>
 <form action="/imports/publish" method="post" id="publishForm" class="space-y-5">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -60,12 +62,17 @@
             <span class="text-sm text-gray-500">{{ _('oi_category_hint') }}</span>
         </label>
         <label>{{ _('oi_quantity') }}
-            <input type="number" name="quantity" min="1" max="{{ product.stock }}" required value="{{ v.quantity or product.stock }}" class="block w-full border rounded p-2 mt-1">
+            <input type="number" name="quantity" min="{{ product.minimum_order or 1 }}" max="{{ product.stock }}" required value="{{ v.quantity or product.stock }}" class="block w-full border rounded p-2 mt-1">
         </label>
         <label>{{ _('oi_markup') }}
             <input type="number" id="markup" name="markup" min="0" max="100000" step="0.01" required value="{{ v.markup if v.markup is defined else '' }}" class="block w-full border rounded p-2 mt-1">
         </label>
     </div>
+    {% if product.currency != 'USD' %}
+    <label class="block">{{ _('oi_exchange_label') }}
+        <input id="exchangeRate" type="number" step="0.0001" min="0.0001" name="rub_per_usd" value="{{ v.rub_per_usd or '' }}" required class="block border rounded p-2">
+    </label>
+    {% endif %}
     <div class="bg-blue-50 border border-blue-200 rounded p-4">
         <p class="text-xl">{{ _('oi_price') }} <strong id="sellingPrice" aria-live="polite">—</strong> USD</p>
         <p class="text-sm text-gray-600 mt-2">{{ _('oi_price_hint') }}</p>
@@ -75,7 +82,7 @@
         <input type="checkbox" name="republish_deleted" value="true">
         {{ _('oi_republish_deleted') }}
     </label>
-    <button type="submit" id="publishButton" {% if product.stock == 0 %}disabled{% endif %} class="bg-green-700 text-white px-6 py-3 rounded disabled:opacity-50">{{ _('oi_publish') }}</button>
+    <button type="submit" id="publishButton" {% if product.stock == 0 or (product.minimum_order or 1) > 1 %}disabled{% endif %} class="bg-green-700 text-white px-6 py-3 rounded disabled:opacity-50">{{ _('oi_publish') }}</button>
 </form>
 <script>
 const description = document.getElementById('offerDescription');
@@ -85,15 +92,28 @@ function updateDescriptionCount() {
 description.addEventListener('input', updateDescriptionCount);
 updateDescriptionCount();
 const markup = document.getElementById('markup');
+function fraction(value) {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
+    if (!match) return null;
+    const decimals = match[2] || '';
+    return [BigInt(match[1] + decimals), 10n ** BigInt(decimals.length)];
+}
 function updatePrice() {
-    const valid = markup.value !== '' && markup.checkValidity();
-    // Integer cents and hundredths of a percent match server rounding upward.
-    const cents = Math.round(Number({{ product.price | tojson }}) * 100);
-    const basisPoints = Math.round(Number(markup.value) * 100);
-    const result = Math.ceil(cents * (10000 + basisPoints) / 10000);
-    document.getElementById('sellingPrice').textContent = valid ? '$' + (result / 100).toFixed(2) : '—';
+    const exchange = document.getElementById('exchangeRate');
+    const price = fraction({{ product.price | tojson }});
+    const rate = fraction(exchange ? exchange.value : '1');
+    const percent = fraction(markup.value);
+    let display = '—';
+    if (price && rate && rate[0] > 0n && percent && markup.checkValidity()) {
+        const numerator = price[0] * rate[1] * (100n * percent[1] + percent[0]) * 100n;
+        const denominator = price[1] * rate[0] * 100n * percent[1];
+        const cents = (numerator + denominator - 1n) / denominator;
+        display = '$' + (cents / 100n) + '.' + (cents % 100n).toString().padStart(2, '0');
+    }
+    document.getElementById('sellingPrice').textContent = display;
 }
 markup.addEventListener('input', updatePrice);
+document.getElementById('exchangeRate')?.addEventListener('input', updatePrice);
 updatePrice();
 document.getElementById('publishForm').addEventListener('submit', () => {
     document.getElementById('publishButton').disabled = true;
@@ -113,24 +133,26 @@ document.getElementById('publishForm').addEventListener('submit', () => {
         </form>
     </details>
     <div class="overflow-x-auto"><table class="w-full text-left">
-        <thead><tr><th class="p-2">{{ _('oi_title') }}</th><th class="p-2">HStore</th><th class="p-2">FunPay</th><th class="p-2">{{ _('oi_available') }}</th><th class="p-2">{{ _('oi_stock_status') }}</th><th class="p-2">{{ _('oi_stock_checked') }}</th><th class="p-2">{{ _('oi_supplier_price') }}</th><th class="p-2">{{ _('oi_markup') }}</th><th class="p-2">{{ _('oi_remove_action') }}</th></tr></thead>
+        <thead><tr><th class="p-2">{{ _('oi_title') }}</th><th class="p-2">{{ _('oi_supplier') }}</th><th class="p-2">FunPay</th><th class="p-2">{{ _('oi_available') }}</th><th class="p-2">{{ _('oi_stock_status') }}</th><th class="p-2">{{ _('oi_stock_checked') }}</th><th class="p-2">{{ _('oi_supplier_price') }}</th><th class="p-2">{{ _('oi_markup') }}</th><th class="p-2">{{ _('oi_remove_action') }}</th></tr></thead>
         <tbody>{% for mapping in stock_mappings %}<tr class="border-t">
             <td class="p-2">{{ mapping.title }}</td>
-            <td class="p-2"><a class="text-blue-700 underline" href="{{ mapping.source_url }}" target="_blank" rel="noopener">#{{ mapping.product }}</a></td>
+            <td class="p-2"><a class="text-blue-700 underline" href="{{ mapping.source_url }}" target="_blank" rel="noopener">{{ mapping.provider }} #{{ mapping.product }}</a></td>
             <td class="p-2">{% if mapping.offer_id %}<a class="text-blue-700 underline" href="https://funpay.com/en/lots/offerEdit?node={{ mapping.node }}&amp;offer={{ mapping.offer_id }}" target="_blank" rel="noopener">#{{ mapping.offer_id }}</a>{% else %}{{ _('oi_stock_pending') }}{% endif %}</td>
             <td class="p-2">{{ mapping.last_stock if mapping.last_stock is not none else '—' }}</td>
             <td class="p-2">{{ _('oi_stock_error') if mapping.last_error else (_('oi_stock_stale') if mapping.stale else _('oi_stock_' + mapping.state)) }}</td>
             <td class="p-2">{{ mapping.checked|timestamp_to_str if mapping.checked else '—' }}</td>
-            <td class="p-2">{{ ('$' + mapping.supplier_price) if mapping.supplier_price else '—' }}</td>
+            <td class="p-2">{{ mapping.supplier_price or '—' }} {{ 'USD' if mapping.provider == 'hstore' else 'RUB' }}</td>
             <td class="p-2"><form action="/imports/markup" method="post" class="flex gap-2 items-center">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="account_id" value="{{ mapping.account }}">
                 <input type="hidden" name="node" value="{{ mapping.node }}">
                 <input type="hidden" name="product_id" value="{{ mapping.product }}">
+                <input type="hidden" name="provider" value="{{ mapping.provider }}">
                 <input aria-label="{{ _('oi_markup') }}" type="number" name="markup" required min="0" max="100000" step="0.01" value="{{ mapping.markup if mapping.markup_confirmed else '' }}" class="border rounded p-1 w-24">
+                {% if mapping.provider != 'hstore' %}<label class="text-sm">{{ _('oi_exchange_label') }}<input name="rub_per_usd" type="number" min="0.0001" step="0.0001" required value="{{ mapping.rub_per_usd or '' }}" class="border rounded p-1 w-24"></label>{% endif %}
                 <button class="text-blue-700 underline">{{ _('oi_markup_save') }}</button>
             </form>{% if not mapping.markup_confirmed %}<span class="text-sm text-amber-700">{{ _('oi_markup_required') }}</span>{% endif %}</td>
-            <td class="p-2"><a class="text-red-700 underline" href="/imports/remove?account_id={{ mapping.account }}&amp;node={{ mapping.node }}&amp;product_id={{ mapping.product }}">{{ _('oi_remove_action') }}</a></td>
+            <td class="p-2"><a class="text-red-700 underline" href="/imports/remove?account_id={{ mapping.account }}&amp;node={{ mapping.node }}&amp;product_id={{ mapping.product }}&amp;provider={{ mapping.provider }}">{{ _('oi_remove_action') }}</a></td>
         </tr>{% endfor %}</tbody>
     </table></div>
 </section>

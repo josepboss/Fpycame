@@ -188,7 +188,37 @@ class WorkflowTests(unittest.TestCase):
     def test_lots_entry_point_and_import_page(self):
         with patch('admin.routes.lots.get_csrf_token', return_value='csrf'):
             self.assertIn('href="/imports"', self.client.get('/lots/').text)
-        self.assertIn('Import from HStore', self.client.get('/imports/').text)
+        self.assertIn('Import account offers', self.client.get('/imports/').text)
+
+    def test_other_suppliers_publish_and_map_without_colliding_ids(self):
+        from admin.services import offer_stock, delivery_mapping
+        for provider, url in [('djekxa','https://djekxa.ru/product/1358'),('dark','https://dark.shopping/product/1358')]:
+            self.product=Product(1358,url,provider+' offer','Description','50',100,'RUB',provider)
+            self.fetch.return_value=self.product
+            response=self.client.post('/imports/preview',data={'csrf_token':'csrf','product_url':url})
+            self.assertIn('exchangeRate',response.text)
+            with routes.database() as db:
+                draft=db.execute('SELECT id FROM drafts ORDER BY created DESC LIMIT 1').fetchone()['id']
+            response=self.publish(draft,rub_per_usd='100',markup='50')
+            self.assertIn('Offer published successfully',response.text)
+            self.assertEqual(self.account.session.post.call_args.kwargs['data']['price'],'0.75')
+        self.assertEqual({m['provider'] for m in offer_stock.mappings(123)},{'dark','djekxa'})
+        api,_=delivery_mapping.read_configs()
+        self.assertEqual(api['dark offer']['provider'],'dark')
+        self.assertEqual(api['djekxa offer']['provider'],'djekxa')
+        response=self.client.post('/imports/markup',data={'csrf_token':'csrf','account_id':123,
+            'node':1259,'product_id':1358,'provider':'dark','markup':'70','rub_per_usd':'90'},follow_redirects=False)
+        self.assertEqual(response.status_code,303)
+        by_provider={m['provider']:m for m in offer_stock.mappings(123)}
+        self.assertEqual(by_provider['dark']['rub_per_usd'],'90')
+        self.assertEqual(by_provider['djekxa']['rub_per_usd'],'100')
+
+    def test_bulk_minimum_is_not_listed_as_single_unit_offer(self):
+        self.product.minimum_order=2
+        draft=self.preview()
+        response=self.publish(draft)
+        self.assertIn('bulk minimum order',response.text)
+        self.account.session.post.assert_not_called()
 
     def test_publish_requires_csrf(self):
         draft = self.preview()

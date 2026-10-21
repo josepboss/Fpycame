@@ -331,3 +331,33 @@ and provides a retry form; do not re-import until cleanup succeeds. The removal 
 prevents the migration task from restoring the offer, while clearing the old publication
 guard allows a fresh import later. Cardinal is restarted automatically after cleanup.
 No existing offer is removed merely by deploying this feature.
+
+## Djekxa and Darkstore account offers
+
+`/imports` accepts HStore, `https://djekxa.ru/product/ID`, and Darkstore
+`https://dark.shopping/product/SLUG` or `/products/view/SLUG` links. Configure each
+supplier's API key in Providers first. SMMCost retains its separate SMM workflow.
+Imports create enabled `/lots` delivery mappings, retain the optional delivery
+format, enforce the 817-character description limit, and monitor stock, titles,
+and supplier prices. Identical product IDs from different suppliers remain separate.
+Existing HStore database rows migrate automatically without losing paused states.
+
+Djekxa and Darkstore API prices are in RUB. Enter **RUB for 1 USD** before publishing;
+Cardinal saves that rate with the selected markup for later price updates. Change
+the saved rate and markup in the Imports table. No exchange rate is guessed.
+Manual-delivery products and products requiring a bulk minimum above one unit
+are rejected; the importer does not create bundles or enforce a FunPay minimum quantity. Supplier stock/API failures are reported as
+failed checks and never treated as zero stock.
+
+Paid account orders run in background workers so slow suppliers do not block chat
+or other order events. Orders may poll for up to ten minutes per attempt, with
+pending purchases resumed every minute and after restart using the saved supplier
+order identity. A lost purchase response, partial delivery, invalid download,
+or uncertain chat delivery requires review; these cases never trigger a second
+purchase automatically. Supplier orders are tracked in
+`storage/cache/supplier_orders.sqlite3`. Full supplier records still pass through
+the shared refresh-token cleanup and unsplit-first delivery formatting.
+
+API references: [Djekxa](https://djekxa.ru/docs) and
+[Dark Shopping](https://dark.shopping/developer). Live purchasing requires configured
+API access and funded supplier balances.

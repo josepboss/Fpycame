@@ -39,26 +39,33 @@ async def save_funpay(golden_key: str = Form(...)):
 
 
 @router.post("/save_api")
-async def save_api(
-        hstore_key: str = Form(""),
-        hstore_secret: str = Form(""),
-        smmcost_key: str = Form(""),
-        dark_key: str = Form(""),
-        djekxa_key: str = Form("")
-):
+async def save_api(request: Request) -> RedirectResponse:
+    # Empty password inputs mean "keep existing", including partial submissions.
+    form = await request.form()
     config = configparser.ConfigParser(interpolation=None)
     config.read(API_KEYS_CFG, encoding="utf-8")
-    for section in ["hstore", "smmcost", "dark", "djekxa"]:
-        if section not in config:
-            config.add_section(section)
-    config["hstore"]["api_key"] = hstore_key
-    config["hstore"]["api_secret"] = hstore_secret
-    config["smmcost"]["api_key"] = smmcost_key
-    config["dark"]["api_key"] = dark_key
-    config["djekxa"]["api_key"] = djekxa_key
-    with open(API_KEYS_CFG, "w", encoding="utf-8") as f:
-        config.write(f)
-    return RedirectResponse(url="/settings", status_code=303)
+    from admin.routes.providers import _load_json, _save_json, PROVIDERS_CFG
+    providers = _load_json(PROVIDERS_CFG)
+    for section in ('hstore', 'smmcost', 'dark', 'djekxa'):
+        fields = [('api_key', f'{section}_key')]
+        if section == 'hstore':
+            fields.append(('api_secret', 'hstore_secret'))
+        for key, name in fields:
+            value = str(form.get(name, '')).strip()
+            if not value:
+                continue
+            if section not in config:
+                config.add_section(section)
+            config[section][key] = value
+            provider = providers.setdefault(section, {})
+            credentials = provider.get('credentials', [])
+            first = dict(credentials[0]) if credentials else {}
+            first[key] = value
+            provider['credentials'] = [first] + credentials[1:]
+    with open(API_KEYS_CFG, 'w', encoding='utf-8') as stream:
+        config.write(stream)
+    _save_json(PROVIDERS_CFG, providers)
+    return RedirectResponse(url='/settings', status_code=303)
 
 
 @router.post("/save_admin")

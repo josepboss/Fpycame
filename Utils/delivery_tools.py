@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from threading import RLock
 
 CHUNK_SIZE = 64
 LONG_WORD = re.compile(r'\S{81,}')
@@ -146,3 +147,13 @@ def split_rejected_text(text: str, translate: Callable[...,str]) -> str:
     if output==text:
         return text
     return translate('delivery_rejected_instructions')+'\n'+output
+
+
+_stock_locks: dict[str, RLock] = {}
+_stock_locks_guard = RLock()
+
+
+def stock_delivery_lock(filename: str) -> RLock:
+    """Serialize purchase, stock writes and delivery for aliases sharing inventory."""
+    with _stock_locks_guard:
+        return _stock_locks.setdefault(filename, RLock())

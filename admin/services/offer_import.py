@@ -32,6 +32,8 @@ class Product:
     price: str
     stock: int
     currency: str = "USD"
+    provider: str = "hstore"
+    minimum_order: int = 1
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -87,7 +89,9 @@ def parse_product(html: str, url: str) -> Product:
     return Product(product_id, url, name, text, str(cost), amount)
 
 
-def fetch_product(url: str) -> Product:
+def fetch_product(url: str, product_id: int | None = None) -> Product:
+    if urlsplit(url.strip()).hostname != "hstora.com":
+        return fetch_account_product(url, product_id)
     expected_id, url = product_url(url)
     try:
         for _ in range(4):
@@ -110,8 +114,19 @@ def fetch_product(url: str) -> Product:
         raise ImportFailure("oi_fetch_failed") from exc
 
 
-def fetch_live_stock(product_id: int) -> int:
-    """Read the same live inventory endpoint used by HStore's storefront."""
+def fetch_live_stock(product_id: int, provider: str = 'hstore') -> int:
+    """Check inventory independently of product descriptions or prices."""
+    if provider != 'hstore':
+        from plugins.providers.accounts import AccountSupplier, SupplierError
+        try:
+            data = AccountSupplier(provider).product(product_id)
+            value = data['quantity']
+            if (int(data['id']) != product_id or isinstance(value, bool) or
+                    not isinstance(value, (int, str)) or not str(value).isdigit()):
+                raise ValueError()
+            return int(value)
+        except (SupplierError, KeyError, TypeError, ValueError):
+            raise ImportFailure('oi_fetch_failed') from None
     try:
         response = requests.get('https://hstora.com/api/product-stock',
             params={'ids': str(product_id)}, timeout=(10, 30), allow_redirects=False,
@@ -264,3 +279,77 @@ def submit_offer(account: Account, fields: dict[str, str]) -> dict:
     if result.get("done") is not True and not result.get("url") and not result.get("offer_id"):
         raise ImportFailure("oi_uncertain")
     return result
+
+
+def supplier_url(value: str) -> tuple[str, str, int | None]:
+    from plugins.providers.accounts import DOMAINS
+    parts = urlsplit(value.strip())
+    provider = next((name for name, hosts in DOMAINS.items() if parts.netloc in hosts), None)
+    if not provider or parts.scheme != 'https' or parts.query or parts.fragment:
+        raise ImportFailure('oi_bad_url')
+    pattern = r'/product/([1-9][0-9]*)/?' if provider == 'djekxa' else r'/(?:product|products/view)/([\w-]+)/?'
+    match = re.fullmatch(pattern, parts.path)
+    if not match:
+        raise ImportFailure('oi_bad_url')
+    identifier = int(match[1]) if match[1].isdigit() else None
+    return provider, value.strip(), identifier
+
+
+def fetch_account_product(url: str, expected_id: int | None = None) -> Product:
+    from plugins.providers.accounts import AccountSupplier, SupplierError
+    provider, url, product_id = supplier_url(url)
+    if expected_id is not None:
+        if product_id is not None and product_id != expected_id:
+            raise ImportFailure('oi_bad_product')
+        product_id = expected_id
+    try:
+        if product_id is None:
+            response = requests.get(url, timeout=(10, 30), allow_redirects=False)
+            if response.status_code != 200:
+                raise ImportFailure('oi_fetch_failed')
+            card = BeautifulSoup(response.text, 'lxml').select_one('.card-product[data-product-id]')
+            if card is None:
+                raise ImportFailure('oi_bad_product')
+            product_id = int(card['data-product-id'])
+        data = AccountSupplier(provider).product(product_id)
+        if isinstance(data.get('id'), bool) or int(data['id']) != product_id:
+            raise ImportFailure('oi_bad_product')
+        if data.get('is_manual_order_delivery') not in (None, 0, False):
+            raise ImportFailure('oi_manual_product')
+        canonical = data.get('url')
+        if canonical:
+            canonical_provider, canonical, canonical_id = supplier_url(canonical)
+            if canonical_provider != provider or (canonical_id is not None and canonical_id != product_id):
+                raise ImportFailure('oi_bad_product')
+            url = canonical
+        title = str(data['title'] if provider == 'djekxa' else data['name']).strip()
+        description = BeautifulSoup(str(data.get('description', ''))+'\n'+str(data.get('manual', '')), 'lxml')
+        for tag in description.select('script,style'):
+            tag.decompose()
+        for br in description.select('br'):
+            br.replace_with('\n')
+        text = description.get_text('\n', strip=True)
+        price = Decimal(str(data['price']))
+        stock, minimum = data['quantity'], data.get('minimum_order', 1)
+        if (not title or not text or not price.is_finite() or price <= 0 or
+            isinstance(stock, bool) or not str(stock).isdigit() or not str(minimum).isdigit() or int(minimum) < 1):
+            raise ImportFailure('oi_bad_product')
+        return Product(product_id, url, title, text, format(price, 'f'), int(stock), 'RUB', provider, int(minimum))
+    except SupplierError as exc:
+        raise ImportFailure('oi_provider_key' if str(exc) == 'oi_provider_key' else 'oi_fetch_failed') from None
+    except (requests.RequestException, KeyError, TypeError, ValueError, InvalidOperation) as exc:
+        if isinstance(exc, ImportFailure):
+            raise
+        raise ImportFailure('oi_bad_product') from None
+
+
+def usd_cost(price: str, currency: str = 'USD', rub_per_usd: str | None = None) -> str:
+    if currency == 'USD':
+        return price
+    try:
+        rate = Decimal(rub_per_usd or '')
+        if currency != 'RUB' or not rate.is_finite() or rate <= 0:
+            raise ValueError()
+        return str(Decimal(price) / rate)
+    except (ValueError, InvalidOperation):
+        raise ImportFailure('oi_exchange_rate') from None

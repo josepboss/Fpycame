@@ -29,11 +29,11 @@ def read_configs() -> tuple[configparser.ConfigParser, configparser.ConfigParser
     return api, auto
 
 
-def check_import_mapping(title: str, product_id: int) -> None:
+def check_import_mapping(title: str, product_id: int, provider: str = 'hstore') -> None:
     if not title.strip() or '\n' in title or '\r' in title:
         raise MappingConflict('Invalid mapping title')
     api, auto = read_configs()
-    if title in api and (api[title].get('provider') != 'hstore' or
+    if title in api and (api[title].get('provider') != provider or
                          api[title].get('product_id') != str(product_id)):
         raise MappingConflict('Title already maps to another provider product')
     if title in auto:
@@ -67,7 +67,7 @@ def save_delivery_mapping(title: str, provider: str, item_id: str, enabled: bool
         raise MappingConflict('Invalid mapping title')
     with _lock:
         if imported:
-            check_import_mapping(title, int(item_id))
+            check_import_mapping(title, int(item_id), provider)
         api, auto = read_configs()
         if title not in api:
             api.add_section(title)
@@ -102,18 +102,18 @@ def save_delivery_mapping(title: str, provider: str, item_id: str, enabled: bool
         atomic_write(api, API_CFG)
 
 
-def alias_delivery_mapping(old_title: str, new_title: str, product_id: int) -> None:
+def alias_delivery_mapping(old_title: str, new_title: str, product_id: int, provider: str = 'hstore') -> None:
     """Retain the old name for pending orders while adding the supplier's new name."""
     if old_title == new_title:
         return
     with _lock:
-        check_import_mapping(new_title, product_id)
+        check_import_mapping(new_title, product_id, provider)
         api, auto = read_configs()
         if new_title in auto and new_title not in api:
             raise MappingConflict('New title has an unrelated delivery configuration')
         if old_title not in api or old_title not in auto:
             raise MappingConflict('Original delivery mapping missing')
-        if api[old_title].get('provider') != 'hstore' or api[old_title].get('product_id') != str(product_id):
+        if api[old_title].get('provider') != provider or api[old_title].get('product_id') != str(product_id):
             raise MappingConflict('Original mapping points to another product')
         # Never overwrite an independently configured response/inventory file.
         if new_title not in auto:
@@ -124,7 +124,7 @@ def alias_delivery_mapping(old_title: str, new_title: str, product_id: int) -> N
         atomic_write(api, API_CFG)
 
 
-def remove_delivery_mappings(title: str, product_id: int, protected_titles: set[str]) -> None:
+def remove_delivery_mappings(title: str, product_id: int, protected_titles: set[str], provider: str = 'hstore') -> None:
     """Remove this offer's delivery aliases but preserve inventory and shared users."""
     with _lock:
         api,auto=read_configs()
@@ -133,11 +133,11 @@ def remove_delivery_mappings(title: str, product_id: int, protected_titles: set[
         if filename:
             candidates.update(name for name in auto.sections()
                 if auto[name].get('productsFileName')==filename and name in api
-                and api[name].get('provider')=='hstore' and api[name].get('product_id')==str(product_id))
+                and api[name].get('provider')==provider and api[name].get('product_id')==str(product_id))
         if candidates & protected_titles:
             return
         for name in candidates:
-            if name in api and (api[name].get('provider')!='hstore' or api[name].get('product_id')!=str(product_id)):
+            if name in api and (api[name].get('provider')!=provider or api[name].get('product_id')!=str(product_id)):
                 continue
             api.remove_section(name)
             auto.remove_section(name)

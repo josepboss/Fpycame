@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 
 # Plugin Metadata
 NAME = "API Delivery"
-VERSION = "1.0.0"
-DESCRIPTION = "Dynamic order fulfillment via HStore and SMMCost APIs."
+VERSION = "1.1.0"
+DESCRIPTION = "Account delivery via HStore, Djekxa and Darkstore, plus SMMCost services."
 CREDITS = "Dyad"
 UUID = "7f3b8e2a-9c1d-4b5e-a6f0-d2c3b4a5e6f7"
 SETTINGS_PAGE = False
@@ -282,6 +282,17 @@ def _on_confirmed(buyer: str, session: Dict):
 
 def post_init_handler(crd: Cardinal):
     init_configs()
+    def resume_loop() -> None:
+        from plugins.providers.fulfillment import resume_pending
+        while True:
+            plugin = crd.plugins.get(UUID)
+            if plugin is not None and plugin.enabled:
+                try:
+                    resume_pending(crd)
+                except Exception as exc:
+                    logger.warning('Supplier recovery check failed (%s).',type(exc).__name__)
+            time.sleep(60)
+    threading.Thread(target=resume_loop, name='supplier-recovery', daemon=True).start()
     logger.info(f"[API Delivery] Plugin v{VERSION} ready.")
 
 
@@ -368,6 +379,42 @@ def new_message_handler(crd: Cardinal, event: NewMessageEvent):
                                  buyer)
 
 
+
+def handle_account_supplier(crd: Cardinal, event: NewOrderEvent, provider: str, cfg: configparser.SectionProxy) -> bool:
+    from pathlib import Path
+    from plugins.providers.fulfillment import obtain
+    from locales.localizer import Localizer
+    event.api_delivery_blocked = True
+    try:
+        lot = crd.AD_CFG[event.config_section_name]
+        filename = lot.get('productsFileName', '')
+        if not filename or Path(filename).name != filename or '\\' in filename:
+            raise ValueError('Invalid stock file')
+        quantity = event.order.amount or 1
+        if quantity > 1 and (not crd.multidelivery_enabled or lot.getboolean('disableMultiDelivery', fallback=False)):
+            raise ValueError('Enable quantity delivery for this account lot')
+        items = obtain(crd.account.id, event.order.id, provider, int(cfg['product_id']), quantity)
+        target = Path('storage/products') / filename
+        # This pre-handler runs under the same per-stock lock as core delivery.
+        from Utils.cardinal_tools import add_products
+        add_products(str(target), items, at_zero_position=True)
+        event.api_delivery_blocked = False
+        logger.info('Supplier %s prepared %s record(s) for order %s.', provider, len(items), event.order.id)
+        return True
+    except Exception as exc:
+        logger.warning('Supplier %s order %s needs checking (%s).',provider,event.order.id,type(exc).__name__)
+        event.error = 1
+        event.error_text = Localizer().translate('oi_supplier_delivery_review', language='en')
+        return False
+
+
+def finish_account_delivery(crd: Cardinal, event: NewOrderEvent) -> None:
+    cfg = get_delivery_config()
+    if event.config_section_name in cfg and cfg[event.config_section_name].get('provider') in ('dark','djekxa'):
+        from plugins.providers.fulfillment import finish
+        finish(crd.account.id,event.order.id,bool(getattr(event,'delivered',False)))
+
+
 def pre_delivery_handler(crd: Cardinal, event: NewOrderEvent):
     """Intercept delivery for smmcost lots and write placeholder."""
     cfg = get_delivery_config()
@@ -377,6 +424,10 @@ def pre_delivery_handler(crd: Cardinal, event: NewOrderEvent):
 
     provider = cfg[lot_name].get("provider")
     if not cfg[lot_name].getboolean("enabled", fallback=True):
+        return
+
+    if provider in ('dark', 'djekxa'):
+        handle_account_supplier(crd,event,provider,cfg[lot_name])
         return
 
     # For hstore: fetch credentials and write to stock file
@@ -404,3 +455,4 @@ BIND_TO_POST_INIT = [post_init_handler]
 BIND_TO_NEW_ORDER = [new_order_handler]
 BIND_TO_NEW_MESSAGE = [new_message_handler]
 BIND_TO_PRE_DELIVERY = [pre_delivery_handler]
+BIND_TO_POST_DELIVERY = [finish_account_delivery]

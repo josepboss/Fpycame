@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import time
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from admin.templating import templates
@@ -18,7 +19,7 @@ from fastapi.responses import Response, RedirectResponse
 
 from admin.auth import get_csrf_token, validate_csrf_token
 from admin.services.offer_import import (ImportFailure, fetch_product, make_account,
-                                         prepare_offer, selling_price, submit_offer)
+                                         prepare_offer, selling_price, submit_offer, usd_cost)
 from locales.localizer import Localizer
 from admin.services import offer_stock
 from admin.services.delivery_mapping import check_import_mapping, save_delivery_mapping, MappingConflict, remove_delivery_mappings
@@ -41,6 +42,8 @@ def database() -> Iterator[sqlite3.Connection]:
         PRIMARY KEY(account, node, product))""")
     try:
         with db:
+            from admin.services.provider_schema import scope_provider
+            scope_provider(db, 'publications')
             yield db
     finally:
         db.close()
@@ -88,17 +91,18 @@ def preview(request: Request, product_url: str = Form(...), csrf_token: str = Fo
 def publish(request: Request, draft: str = Form(...), title: str = Form(...),
             description: str = Form(...), node: int = Form(...), quantity: int = Form(...),
             markup: str = Form(...), csrf_token: str = Form(""),
-            republish_deleted: bool = Form(False)) -> Response:
+            republish_deleted: bool = Form(False), rub_per_usd: Annotated[str, Form()] = '') -> Response:
     csrf(csrf_token)
     with database() as db:
         row = db.execute("SELECT * FROM drafts WHERE id = ?", (draft,)).fetchone()
     if row is None or row["created"] < time.time() - 86400:
         return render(request, error="oi_expired")
     product = json.loads(row["product"])
+    provider = product.get("provider", "hstore")
     # HTML form submission serializes textarea newlines as CRLF, while the
     # browser's value/counter uses LF. Normalize before counting or sending.
     description = description.replace("\r\n", "\n").replace("\r", "\n").strip()
-    values = dict(title=title, description=description, node=node, quantity=quantity, markup=markup)
+    values = dict(title=title, description=description, node=node, quantity=quantity, markup=markup, rub_per_usd=rub_per_usd)
     context = dict(product=product, draft=draft, values=values)
     claimed = False
     account = None
@@ -108,10 +112,13 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
             raise ImportFailure("oi_invalid")
         if not description or len(description) > 817:
             raise ImportFailure("oi_description_length")
-        if not 1 <= quantity <= product["stock"]:
+        if product.get('minimum_order', 1) > 1:
+            raise ImportFailure('oi_minimum_product')
+        if not product.get("minimum_order", 1) <= quantity <= product["stock"]:
             raise ImportFailure("oi_stock")
-        price = selling_price(product["price"], markup)
-        current = fetch_product(product["url"])
+        price = selling_price(usd_cost(product["price"], product.get("currency", "USD"), rub_per_usd), markup)
+        current = (fetch_product(product["url"]) if provider == "hstore" else
+                   fetch_product(product["url"], product_id=product["product_id"]))
         if current.price != product["price"] or current.stock < quantity:
             raise ImportFailure("oi_changed")
         account = make_account()
@@ -122,13 +129,13 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
         if any(lot.description == title for lot in existing):
             raise ImportFailure("oi_duplicate")
         try:
-            check_import_mapping(title, product["product_id"])
+            check_import_mapping(title, product["product_id"], provider)
         except MappingConflict:
             raise ImportFailure("oi_delivery_conflict")
         with database() as db:
             try:
-                db.execute("INSERT INTO publications VALUES (?, ?, ?, ?, ?)",
-                           (account.id, node, product["product_id"], draft, "publishing"))
+                db.execute("INSERT INTO publications(account,node,product,draft,state,provider) VALUES (?, ?, ?, ?, ?, ?)",
+                           (account.id, node, product["product_id"], draft, "publishing", provider))
             except sqlite3.IntegrityError:
                 # Only an explicitly confirmed deletion of a completed publish
                 # permits reuse. Never retry pending/uncertain submissions.
@@ -136,21 +143,21 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
                     raise ImportFailure("oi_duplicate")
                 updated = db.execute(
                     """UPDATE publications SET draft = ?, state = 'publishing'
-                       WHERE account = ? AND node = ? AND product = ?
+                       WHERE account = ? AND node = ? AND product = ? AND provider = ?
                        AND state = 'published' AND draft != ?""",
-                    (draft, account.id, node, product["product_id"], draft))
+                    (draft, account.id, node, product["product_id"], provider, draft))
                 if updated.rowcount != 1:
                     raise ImportFailure("oi_duplicate")
         claimed = True
         result = submit_offer(account, fields)
-        offer_stock.save_mapping(account.id, node, product, title, offer_stock.response_offer_id(result), markup=markup)
+        offer_stock.save_mapping(account.id, node, product, title, offer_stock.response_offer_id(result), markup=markup, rub_per_usd=rub_per_usd or None)
         with database() as db:
             db.execute("UPDATE publications SET state = 'published' WHERE draft = ?", (draft,))
         # Publishing already succeeded. Mapping/restart errors must never invite
         # another publish and create a duplicate public offer.
         delivery_status = "oi_delivery_ready"
         try:
-            save_delivery_mapping(title, 'hstore', str(product["product_id"]), True, imported=True)
+            save_delivery_mapping(title, provider, str(product["product_id"]), True, imported=True)
             if not restart_cardinal():
                 delivery_status = "oi_delivery_restart"
         except Exception as exc:
@@ -202,25 +209,28 @@ def track_offer(request: Request, product_url: str = Form(...), offer_url: str =
 
 @router.post('/markup')
 def update_markup(request: Request, account_id: int = Form(...), node: int = Form(...),
-                  product_id: int = Form(...), markup: str = Form(...), csrf_token: str = Form('')) -> Response:
+                  product_id: int = Form(...), markup: str = Form(...), csrf_token: str = Form(''),
+                  provider: Annotated[str, Form()] = 'hstore', rub_per_usd: Annotated[str, Form()] = '') -> Response:
     csrf(csrf_token)
     try:
+        if rub_per_usd:
+            usd_cost('1','RUB',rub_per_usd)
         selling_price('1',markup)
-    except ImportFailure:
-        return render(request,error='oi_bad_markup')
+    except ImportFailure as exc:
+        return render(request,error=str(exc))
     with offer_stock.database() as db:
-        result=db.execute("""UPDATE mappings SET markup=?,markup_confirmed=1,price_sync_pending=1
-            WHERE account=? AND node=? AND product=?""",(markup,account_id,node,product_id))
+        result=db.execute("""UPDATE mappings SET markup=?,markup_confirmed=1,price_sync_pending=1,rub_per_usd=COALESCE(?,rub_per_usd)
+            WHERE account=? AND node=? AND product=? AND provider=?""",(markup,rub_per_usd or None,account_id,node,product_id,provider))
         if result.rowcount != 1:
             raise HTTPException(status_code=404,detail='Mapping not found')
     return RedirectResponse('/imports/?markup_saved=true',status_code=303)
 
 
 @router.get('/remove')
-def remove_page(request: Request, account_id: int, node: int, product_id: int) -> Response:
+def remove_page(request: Request, account_id: int, node: int, product_id: int, provider: str = 'hstore') -> Response:
     with offer_stock.database() as db:
-        row=db.execute('SELECT * FROM mappings WHERE account=? AND node=? AND product=? AND state!=?',
-                       (account_id,node,product_id,'removed')).fetchone()
+        row=db.execute('SELECT * FROM mappings WHERE account=? AND node=? AND product=? AND provider=? AND state!=?',
+                       (account_id,node,product_id,provider,'removed')).fetchone()
     if row is None:
         raise HTTPException(status_code=404,detail='Mapping not found')
     return render(request,remove_mapping=dict(row))
@@ -228,21 +238,22 @@ def remove_page(request: Request, account_id: int, node: int, product_id: int) -
 
 @router.post('/remove')
 def remove_import(request: Request, account_id: int = Form(...), node: int = Form(...),
-                  product_id: int = Form(...), csrf_token: str = Form(''), confirm: bool = Form(False)) -> Response:
+                  product_id: int = Form(...), csrf_token: str = Form(''), confirm: bool = Form(False),
+                  provider: Annotated[str, Form()] = 'hstore') -> Response:
     csrf(csrf_token)
     if not confirm:
         raise HTTPException(status_code=400,detail=Localizer().translate('oi_remove_confirm',language='en'))
-    identity=(account_id,node,product_id)
+    identity=(account_id,node,product_id,provider)
     with offer_stock.database() as db:
-        row=db.execute('SELECT * FROM mappings WHERE account=? AND node=? AND product=?',identity).fetchone()
+        row=db.execute('SELECT * FROM mappings WHERE account=? AND node=? AND product=? AND provider=?',identity).fetchone()
         if row is None or row['state']=='removed':
             return RedirectResponse('/imports/?removed=true',status_code=303)
         mapping=dict(row)
-        db.execute("UPDATE mappings SET state='removing' WHERE account=? AND node=? AND product=?",identity)
+        db.execute("UPDATE mappings SET state='removing' WHERE account=? AND node=? AND product=? AND provider=?",identity)
     try:
         with offer_stock.action_lock(*identity):
             with offer_stock.database() as db:
-                current=db.execute('SELECT state FROM mappings WHERE account=? AND node=? AND product=?',identity).fetchone()
+                current=db.execute('SELECT state FROM mappings WHERE account=? AND node=? AND product=? AND provider=?',identity).fetchone()
             if current is None or current['state']=='removed':
                 return RedirectResponse('/imports/?removed=true',status_code=303)
             account=make_account()
@@ -263,17 +274,17 @@ def remove_import(request: Request, account_id: int = Form(...), node: int = For
                 account.delete_lot(offer_id)
                 if any(int(lot.id)==offer_id for lot in account.get_my_subcategory_lots(node,locale='en')):
                     raise ValueError('Offer deletion not confirmed')
-            other_titles={m['title'] for m in offer_stock.mappings(account_id) if (m['account'],m['node'],m['product']) != identity}
-            remove_delivery_mappings(mapping['title'],product_id,other_titles)
+            other_titles={m['title'] for m in offer_stock.mappings(account_id) if (m['account'],m['node'],m['product'],m['provider']) != identity}
+            remove_delivery_mappings(mapping['title'],product_id,other_titles,provider)
             with database() as db:
-                db.execute('DELETE FROM publications WHERE account=? AND node=? AND product=?',identity)
+                db.execute('DELETE FROM publications WHERE account=? AND node=? AND product=? AND provider=?',identity)
             with offer_stock.database() as db:
-                db.execute("UPDATE mappings SET state='removed',last_error='' WHERE account=? AND node=? AND product=?",identity)
+                db.execute("UPDATE mappings SET state='removed',last_error='' WHERE account=? AND node=? AND product=? AND provider=?",identity)
             restarted=restart_cardinal()
             return RedirectResponse('/imports/?removed=true'+('' if restarted else '&restart_failed=true'),status_code=303)
     except Exception as exc:
         logger.error('Imported offer removal failed (%s).',type(exc).__name__)
         with offer_stock.database() as db:
-            db.execute("UPDATE mappings SET state='removal_error',last_error=? WHERE account=? AND node=? AND product=?",
+            db.execute("UPDATE mappings SET state='removal_error',last_error=? WHERE account=? AND node=? AND product=? AND provider=?",
                        (type(exc).__name__,*identity))
         return render(request,remove_mapping=mapping,error='oi_remove_failed')

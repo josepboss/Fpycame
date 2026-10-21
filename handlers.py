@@ -648,9 +648,27 @@ def deliver_product_handler(c: Cardinal, e: NewOrderEvent, *args) -> None:
         logger.info(f"Для лота \"{e.order.description}\" отключена автовыдача.")  # locale
         return
 
-    c.run_handlers(c.pre_delivery_handlers, (c, e))
-    deliver_goods(c, e, *args)
-    c.run_handlers(c.post_delivery_handlers, (c, e))
+    from plugins.api_delivery import get_delivery_config
+    cfg = get_delivery_config()
+    asynchronous = (e.config_section_name in cfg and
+                    cfg[e.config_section_name].get('provider') in ('dark', 'djekxa'))
+
+    def process_delivery() -> None:
+        from Utils.delivery_tools import stock_delivery_lock
+        with stock_delivery_lock(config_section_obj.get('productsFileName', e.config_section_name)):
+            if asynchronous:
+                # Fail closed if the provider plugin is disabled or its pre-handler fails.
+                e.api_delivery_blocked = True
+            c.run_handlers(c.pre_delivery_handlers, (c, e))
+            if not getattr(e, 'api_delivery_blocked', False):
+                deliver_goods(c, e, *args)
+            c.run_handlers(c.post_delivery_handlers, (c, e))
+
+    if asynchronous:
+        from plugins.providers.fulfillment import start_worker
+        start_worker(c.account.id, e.order.id, process_delivery)
+    else:
+        process_delivery()
 
 
 # REGISTER_TO_POST_DELIVERY
