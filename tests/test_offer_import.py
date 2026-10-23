@@ -252,6 +252,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('name="title_ru"',response.text)
         self.account.session.post.assert_not_called()
 
+    def test_legacy_russian_draft_renders_source_without_translation_fields(self):
+        from bs4 import BeautifulSoup
+        from starlette.requests import Request
+        product=Product(32038,'https://djekxa.ru/product/32038','Русский заголовок','Русское описание','1',1,'RUB','djekxa')
+        response=routes.render(Request({'type':'http','method':'GET','path':'/imports/'}),product=product.to_dict(),draft='legacy')
+        soup=BeautifulSoup(response.body,'lxml')
+        self.assertEqual(soup.select_one('input[name="title_ru"]')['value'],'Русский заголовок')
+        self.assertEqual(soup.select_one('textarea[name="description_ru"]').text,'Русское описание')
+        self.assertEqual(soup.select_one('input[name="title"]')['value'],'')
+
     def test_publish_requires_csrf(self):
         draft = self.preview()
         self.assertEqual(self.publish(draft, csrf_token='bad').status_code, 403)

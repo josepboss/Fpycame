@@ -76,6 +76,15 @@ def bilingual_text(text: str, limit: int) -> dict[str, str]:
     return {source: text, target: translate_text(text, source, target)[:limit].rstrip()}
 
 
+
+def source_listing(title: str, description: str) -> dict[str, str]:
+    """Keep source text available even for old drafts or failed translation."""
+    fields = {'title_en': '', 'title_ru': '', 'description_en': '', 'description_ru': ''}
+    for name, value, limit in [('title', title, 100), ('description', description, 817)]:
+        language = 'ru' if CYRILLIC.search(value) else 'en'
+        fields[f'{name}_{language}'] = value[:limit]
+    return fields
+
 def bilingual_listing(title: str, description: str) -> dict[str, str]:
     names, descriptions = bilingual_text(title, 100), bilingual_text(description, 817)
     return {'title_en': names['en'], 'title_ru': names['ru'],

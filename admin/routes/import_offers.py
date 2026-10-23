@@ -26,7 +26,7 @@ from admin.services.delivery_mapping import check_import_mapping, save_delivery_
 from admin.routes.lots import restart_cardinal
 from urllib.parse import parse_qs, urlsplit
 
-from admin.services.offer_translation import bilingual_listing, bilingual_text, CYRILLIC
+from admin.services.offer_translation import bilingual_listing, bilingual_text, source_listing, CYRILLIC
 
 router = APIRouter()
 logger = logging.getLogger("FPC.admin.import")
@@ -56,6 +56,13 @@ def render(request: Request, **context) -> Response:
     cfg.read("configs/_main.cfg", encoding="utf-8")
     lang = cfg.get("Other", "language", fallback="en")
     localizer = Localizer()
+    product = context.get('product')
+    if isinstance(product, dict):
+        product = dict(product)
+        listing = source_listing(product.get('title',''),product.get('description',''))
+        listing.update(product.get('listing') or {})
+        product['listing'] = listing
+        context['product'] = product
     stock_mappings = offer_stock.mappings()
     for mapping in stock_mappings:
         mapping['stale'] = mapping['checked'] is not None and time.time() - mapping['checked'] > 300
@@ -79,14 +86,13 @@ def preview(request: Request, product_url: str = Form(...), csrf_token: str = Fo
     csrf(csrf_token)
     try:
         product = fetch_product(product_url)
-        listing = None
+        listing = source_listing(product.title, product.description)
         translation_error = None
         try:
-            listing = bilingual_listing(product.title, product.description)
+            listing.update(bilingual_listing(product.title, product.description))
         except ImportFailure:
             translation_error = 'oi_translation_failed'
-            listing = {f'title_{"ru" if CYRILLIC.search(product.title) else "en"}': product.title[:100],
-                       f'description_{"ru" if CYRILLIC.search(product.description) else "en"}': product.description[:817]}
+
         snapshot = product.to_dict()
         snapshot['listing'] = listing
         draft = secrets.token_urlsafe(24)
