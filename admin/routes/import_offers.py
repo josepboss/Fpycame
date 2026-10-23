@@ -26,6 +26,8 @@ from admin.services.delivery_mapping import check_import_mapping, save_delivery_
 from admin.routes.lots import restart_cardinal
 from urllib.parse import parse_qs, urlsplit
 
+from admin.services.offer_translation import bilingual_listing, bilingual_text, CYRILLIC
+
 router = APIRouter()
 logger = logging.getLogger("FPC.admin.import")
 DB_PATH = Path("storage/cache/offer_imports.sqlite3")
@@ -77,12 +79,22 @@ def preview(request: Request, product_url: str = Form(...), csrf_token: str = Fo
     csrf(csrf_token)
     try:
         product = fetch_product(product_url)
+        listing = None
+        translation_error = None
+        try:
+            listing = bilingual_listing(product.title, product.description)
+        except ImportFailure:
+            translation_error = 'oi_translation_failed'
+            listing = {f'title_{"ru" if CYRILLIC.search(product.title) else "en"}': product.title[:100],
+                       f'description_{"ru" if CYRILLIC.search(product.description) else "en"}': product.description[:817]}
+        snapshot = product.to_dict()
+        snapshot['listing'] = listing
         draft = secrets.token_urlsafe(24)
         with database() as db:
             db.execute("DELETE FROM drafts WHERE created < ?", (time.time() - 86400,))
             db.execute("INSERT INTO drafts VALUES (?, ?, ?)",
-                       (draft, json.dumps(product.to_dict()), time.time()))
-        return render(request, product=product.to_dict(), draft=draft)
+                       (draft, json.dumps(snapshot), time.time()))
+        return render(request, product=snapshot, draft=draft, error=translation_error)
     except ImportFailure as exc:
         return render(request, error=str(exc), source_url=product_url)
 
@@ -91,7 +103,8 @@ def preview(request: Request, product_url: str = Form(...), csrf_token: str = Fo
 def publish(request: Request, draft: str = Form(...), title: str = Form(...),
             description: str = Form(...), node: int = Form(...), quantity: int = Form(...),
             markup: str = Form(...), csrf_token: str = Form(""),
-            republish_deleted: bool = Form(False), rub_per_usd: Annotated[str, Form()] = '') -> Response:
+            republish_deleted: bool = Form(False), rub_per_usd: Annotated[str, Form()] = '',
+            title_ru: Annotated[str, Form()] = '', description_ru: Annotated[str, Form()] = '') -> Response:
     csrf(csrf_token)
     with database() as db:
         row = db.execute("SELECT * FROM drafts WHERE id = ?", (draft,)).fetchone()
@@ -102,7 +115,7 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
     # HTML form submission serializes textarea newlines as CRLF, while the
     # browser's value/counter uses LF. Normalize before counting or sending.
     description = description.replace("\r\n", "\n").replace("\r", "\n").strip()
-    values = dict(title=title, description=description, node=node, quantity=quantity, markup=markup, rub_per_usd=rub_per_usd)
+    values = dict(title=title, description=description, node=node, quantity=quantity, markup=markup, rub_per_usd=rub_per_usd, title_ru=title_ru, description_ru=description_ru)
     context = dict(product=product, draft=draft, values=values)
     claimed = False
     account = None
@@ -116,6 +129,18 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
             raise ImportFailure('oi_minimum_product')
         if not product.get("minimum_order", 1) <= quantity <= product["stock"]:
             raise ImportFailure("oi_stock")
+        if CYRILLIC.search(title) or CYRILLIC.search(description):
+            # Support an older, already-open draft that still submits Russian
+            # source text through the formerly shared fields.
+            listing = bilingual_listing(title, description)
+            title, description = listing['title_en'], listing['description_en']
+            title_ru = title_ru or listing['title_ru']
+            description_ru = description_ru or listing['description_ru']
+        title_ru = title_ru.strip() or bilingual_text(title,100)['ru']
+        description_ru = description_ru.replace('\r\n','\n').replace('\r','\n').strip() or bilingual_text(description,817)['ru']
+        if not 1 <= len(title_ru) <= 100 or not 1 <= len(description_ru) <= 817:
+            raise ImportFailure('oi_translation_limits')
+        values.update(title=title,description=description,title_ru=title_ru,description_ru=description_ru)
         price = selling_price(usd_cost(product["price"], product.get("currency", "USD"), rub_per_usd), markup)
         current = (fetch_product(product["url"]) if provider == "hstore" else
                    fetch_product(product["url"], product_id=product["product_id"]))
@@ -123,13 +148,14 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
             raise ImportFailure("oi_changed")
         account = make_account()
         # Fetch the live editor to retain fresh CSRF and anti-stale form fields.
-        fields = prepare_offer(account, node, title, description, price, quantity)
+        fields = prepare_offer(account, node, title, description, price, quantity, title_ru=title_ru, description_ru=description_ru)
         # Detect offers made outside this importer as well.
         existing = account.get_my_subcategory_lots(node, locale="en")
-        if any(lot.description == title for lot in existing):
+        if any(lot.description in (title,title_ru) for lot in existing):
             raise ImportFailure("oi_duplicate")
         try:
-            check_import_mapping(title, product["product_id"], provider)
+            for mapped_title in {title,title_ru}:
+                check_import_mapping(mapped_title, product["product_id"], provider)
         except MappingConflict:
             raise ImportFailure("oi_delivery_conflict")
         with database() as db:
@@ -158,6 +184,8 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
         delivery_status = "oi_delivery_ready"
         try:
             save_delivery_mapping(title, provider, str(product["product_id"]), True, imported=True)
+            from admin.services.delivery_mapping import alias_delivery_mapping
+            alias_delivery_mapping(title,title_ru,product['product_id'],provider)
             if not restart_cardinal():
                 delivery_status = "oi_delivery_restart"
         except Exception as exc:

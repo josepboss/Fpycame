@@ -14,6 +14,8 @@ from plugins.providers import accounts, fulfillment
 
 class SupplierTests(unittest.TestCase):
     def setUp(self):
+        translation=patch('admin.services.offer_translation.translate_text',side_effect=lambda text,source,target:text)
+        translation.start();self.addCleanup(translation.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.folder = Path(self.temp.name)

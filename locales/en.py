@@ -804,3 +804,17 @@ smm_completed = '✅ Order completed! Quantity: {}. SMM Order ID: #{}'
 smm_partial = 'ℹ️ Partial delivery: {}/{}. SMM Order ID: #{}. Please contact support for the remaining quantity.'
 
 smm_service_failed = '⚠️ The provider reports that this service was cancelled or failed. Please contact support.'
+
+oi_title_en = 'English title (default listing)'
+
+oi_description_en = 'English description'
+
+oi_title_ru = 'Russian title'
+
+oi_description_ru = 'Russian description'
+
+oi_translation_hint = 'Both languages are filled automatically. Review or edit before publishing. Public offer text is sent to MyMemory for translation; free daily limits apply.'
+
+oi_translation_failed = 'Automatic translation is unavailable or its daily limit was reached. Fill in both language versions manually, or retry the preview later.'
+
+oi_translation_limits = 'Each title must have 1–100 characters and each description 1–817 characters.'

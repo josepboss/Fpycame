@@ -144,6 +144,8 @@ class ProductTests(unittest.TestCase):
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
+        translation=patch('admin.services.offer_translation.translate_text',side_effect=lambda text,source,target:text)
+        translation.start();self.addCleanup(translation.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.start_patch('admin.routes.import_offers.DB_PATH', Path(self.temp.name) / 'imports.sqlite3')
@@ -218,6 +220,36 @@ class WorkflowTests(unittest.TestCase):
         draft=self.preview()
         response=self.publish(draft)
         self.assertIn('bulk minimum order',response.text)
+        self.account.session.post.assert_not_called()
+
+    def test_russian_import_uses_distinct_language_fields_and_delivery_aliases(self):
+        from admin.services import delivery_mapping
+        self.product=Product(32038,'https://djekxa.ru/product/32038','Русский заголовок','Русское описание','50',10,'RUB','djekxa')
+        self.fetch.return_value=self.product
+        listing={'title_en':'English title','title_ru':'Русский заголовок',
+                 'description_en':'English description','description_ru':'Русское описание'}
+        with patch.object(routes,'bilingual_listing',return_value=listing):
+            page=self.client.post('/imports/preview',data={'csrf_token':'csrf','product_url':self.product.url})
+        self.assertIn('English title',page.text)
+        self.assertIn('Русский заголовок',page.text)
+        with routes.database() as db:draft=db.execute('SELECT id FROM drafts').fetchone()['id']
+        response=self.publish(draft,title=listing['title_en'],description=listing['description_en'],
+            title_ru=listing['title_ru'],description_ru=listing['description_ru'],rub_per_usd='100',quantity=1)
+        self.assertIn('Offer published successfully',response.text)
+        fields=self.account.session.post.call_args.kwargs['data']
+        for key,expected in [('fields[summary][en]','English title'),('fields[summary][ru]','Русский заголовок'),
+                             ('fields[desc][en]','English description'),('fields[desc][ru]','Русское описание')]:
+            self.assertEqual(fields[key],expected)
+        api,auto=delivery_mapping.read_configs()
+        self.assertEqual(api['English title']['product_id'],'32038')
+        self.assertEqual(api['Русский заголовок']['provider'],'djekxa')
+        self.assertEqual(auto['English title']['productsFileName'],auto['Русский заголовок']['productsFileName'])
+
+    def test_translation_outage_still_allows_manual_review_without_publication(self):
+        with patch.object(routes,'bilingual_listing',side_effect=ImportFailure('oi_translation_failed')):
+            response=self.client.post('/imports/preview',data={'csrf_token':'csrf','product_url':URL})
+        self.assertIn('Automatic translation is unavailable',response.text)
+        self.assertIn('name="title_ru"',response.text)
         self.account.session.post.assert_not_called()
 
     def test_publish_requires_csrf(self):

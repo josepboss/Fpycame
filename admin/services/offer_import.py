@@ -214,15 +214,16 @@ def new_offer_fields(html: str, node: int) -> dict[str, str]:
 
 
 def prepare_offer(account: Account, node: int, title: str, description: str,
-                  price: str, quantity: int) -> dict[str, str]:
+                  price: str, quantity: int, title_ru: str | None = None,
+                  description_ru: str | None = None) -> dict[str, str]:
     response = account.method("get", f"lots/offerEdit?node={node}", {}, {},
                               raise_not_200=True, locale="en")
     fields = new_offer_fields(response.text, node)
     fields.update({"offer_id": "0", "deleted": "", "active": "on",
                    "auto_delivery": "", "secrets": "", "amount": str(quantity),
                    "price": price, "fields[summary][en]": title,
-                   "fields[summary][ru]": title, "fields[desc][en]": description,
-                   "fields[desc][ru]": description, "fields[images]": ""})
+                   "fields[summary][ru]": title_ru if title_ru is not None else title, "fields[desc][en]": description,
+                   "fields[desc][ru]": description_ru if description_ru is not None else description, "fields[images]": ""})
     return fields
 
 

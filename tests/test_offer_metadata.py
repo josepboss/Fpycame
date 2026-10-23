@@ -12,6 +12,8 @@ URL='https://hstora.com/en/product/1358-old-title'
 
 class MetadataTests(unittest.TestCase):
     def setUp(self):
+        translation=patch('admin.services.offer_translation.translate_text',side_effect=lambda text,source,target:text)
+        translation.start();self.addCleanup(translation.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         root=Path(self.temp.name)
         for module,name,value in [(stock,'DB_PATH',root/'stock.db'),(delivery,'API_CFG',root/'api.cfg'),
@@ -43,6 +45,19 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual((delivery.PRODUCTS/filename).read_text(),'existing-stock\n')
         self.assertEqual(stock.mappings(123)[0]['title'],'New title')
         self.assertEqual(stock.mappings(123)[0]['markup'],'30')
+
+    def test_russian_supplier_rename_keeps_english_default_and_both_delivery_aliases(self):
+        self.current.title='Новое название'
+        with patch.object(stock,'bilingual_text',return_value={'en':'New English title','ru':'Новое название'}):
+            stock.sync_metadata(self.account)
+        self.assertEqual(self.fields.title_en,'New English title')
+        self.assertEqual(self.fields.title_ru,'Новое название')
+        api,auto=delivery.read_configs()
+        self.assertIn('New English title',api)
+        self.assertIn('Новое название',api)
+        self.assertEqual(auto['New English title']['productsFileName'],auto['Новое название']['productsFileName'])
+        self.assertEqual(stock.mappings()[0]['title'],'New English title')
+        self.assertEqual(stock.mappings()[0]['supplier_title'],'Новое название')
 
     def test_deleting_old_alias_preserves_shared_inventory(self):
         from fastapi.testclient import TestClient

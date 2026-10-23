@@ -39,6 +39,7 @@
 </form>
 {% if product %}
 {% set v = values or {} %}
+{% set listing = product.listing or {} %}
 <div class="bg-gray-50 border rounded p-4 mb-5 flex flex-wrap gap-8">
     <p>{{ _('oi_cost') }} <strong>{{ product.price }} {{ product.currency }}</strong></p>
     <p>{{ _('oi_available') }} <strong>{{ product.stock }}</strong></p>
@@ -48,14 +49,22 @@
 <form action="/imports/publish" method="post" id="publishForm" class="space-y-5">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="draft" value="{{ draft }}">
-    <label class="block">{{ _('oi_title') }}
-        <input name="title" maxlength="100" required value="{{ v.title if v.title is defined else product.title }}" class="block w-full border rounded p-2 mt-1">
+    <label class="block">{{ _('oi_title_en') }}
+        <input name="title" maxlength="100" required value="{{ v.title if v.title is defined else listing.get('title_en', '') }}" class="block w-full border rounded p-2 mt-1">
     </label>
-    <label class="block">{{ _('oi_description') }}
-        <textarea id="offerDescription" name="description" rows="14" maxlength="817" required class="block w-full border rounded p-2 mt-1">{{ v.description if v.description is defined else product.description[:817] }}</textarea>
+    <label class="block">{{ _('oi_description_en') }}
+        <textarea id="offerDescription" name="description" rows="14" maxlength="817" required class="block w-full border rounded p-2 mt-1">{{ v.description if v.description is defined else listing.get('description_en','') }}</textarea>
         <span id="descriptionCount" class="text-sm text-gray-500" aria-live="polite"></span>
         {% if product.description|length > 817 and not values %}<span class="block text-sm text-amber-700">{{ _('oi_description_trimmed') }}</span>{% endif %}
     </label>
+    <label class="block">{{ _('oi_title_ru') }}
+        <input name="title_ru" maxlength="100" required value="{{ v.title_ru if v.title_ru is defined else listing.get('title_ru','') }}" class="block w-full border rounded p-2 mt-1">
+    </label>
+    <label class="block">{{ _('oi_description_ru') }}
+        <textarea id="offerDescriptionRu" name="description_ru" maxlength="817" rows="10" required class="block w-full border rounded p-2 mt-1">{{ v.description_ru if v.description_ru is defined else listing.get('description_ru','') }}</textarea>
+        <span id="descriptionCountRu" class="text-sm text-gray-500" aria-live="polite"></span>
+    </label>
+    <p class="text-sm text-gray-600">{{ _('oi_translation_hint') }}</p>
     <div class="grid md:grid-cols-3 gap-5">
         <label>{{ _('oi_category') }}
             <input type="number" name="node" min="1" max="1000000" required value="{{ v.node or 1259 }}" class="block w-full border rounded p-2 mt-1">
@@ -91,6 +100,12 @@ function updateDescriptionCount() {
 }
 description.addEventListener('input', updateDescriptionCount);
 updateDescriptionCount();
+const descriptionRu = document.getElementById('offerDescriptionRu');
+function updateRussianCount() {
+    document.getElementById('descriptionCountRu').textContent = Array.from(descriptionRu.value).length + ' / 817';
+}
+descriptionRu.addEventListener('input', updateRussianCount);
+updateRussianCount();
 const markup = document.getElementById('markup');
 function fraction(value) {
     const match = /^(\d+)(?:\.(\d+))?$/.exec(value);

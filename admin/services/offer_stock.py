@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from admin.services.offer_import import fetch_live_stock, product_url, fetch_product, selling_price, supplier_url, usd_cost
 from admin.services.delivery_mapping import alias_delivery_mapping
+from admin.services.offer_translation import bilingual_text
 
 DB_PATH = Path("storage/cache/offer_stock.sqlite3")
 PUBLICATIONS_DB = Path("storage/cache/offer_imports.sqlite3")
@@ -210,16 +211,22 @@ def sync_metadata(account, cardinal=None) -> None:
                         raise ValueError('Offer identity mismatch')
                 changed=False
                 if title_changed:
+                    translated_titles=bilingual_text(product.title,100)
+                    target_title=translated_titles['en']
+                    target_title_ru=translated_titles['ru']
+                    if any('\n' in name or '\r' in name for name in translated_titles.values()):
+                        raise ValueError('Invalid translated title')
                     existing=account.get_my_subcategory_lots(mapping['node'],locale='en')
-                    if any(lot.description==target_title and int(lot.id)!=mapping['offer_id'] for lot in existing):
+                    if any(lot.description in (target_title,target_title_ru) and int(lot.id)!=mapping['offer_id'] for lot in existing):
                         raise ValueError('New title conflicts with another FunPay offer')
                     alias_delivery_mapping(mapping['title'],target_title,mapping['product'],mapping['provider'])
+                    alias_delivery_mapping(target_title,target_title_ru,mapping['product'],mapping['provider'])
                     if cardinal is not None:
                         from Utils.config_loader import load_auto_delivery_config
                         from admin.services.delivery_mapping import AUTO_CFG
                         cardinal.AD_CFG=load_auto_delivery_config(str(AUTO_CFG))
                     fields.title_en=target_title
-                    fields.title_ru=target_title
+                    fields.title_ru=target_title_ru
                     changed=True
                 target_price=None
                 if price_changed and markup is not None:
@@ -229,7 +236,7 @@ def sync_metadata(account, cardinal=None) -> None:
                 if changed:
                     account.save_lot(fields,locale='en')
                     saved=account.get_lot_fields(mapping['offer_id'])
-                    if title_changed and (saved.title_en!=target_title or saved.title_ru!=target_title):
+                    if title_changed and (saved.title_en!=target_title or saved.title_ru!=target_title_ru):
                         raise ValueError('Title update not confirmed')
                     if target_price and Decimal(str(saved.price))!=Decimal(target_price):
                         raise ValueError('Price update not confirmed')

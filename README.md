@@ -374,3 +374,20 @@ order ID. A lost/invalid creation response sends a neutral verification message
 and requires operator review; the bot never blindly places the order again.
 Historical orders created before this persistence change are not automatically
 recovered because their provider order IDs were only held in memory.
+
+## English and Russian offer text
+
+Import preview detects Cyrillic separately in the title and description. Russian
+source text stays in the Russian fields while English translations become the
+default listing; English source stays in the English fields and gains Russian
+translations. Both versions are editable before publishing. Titles are limited to
+100 characters and descriptions to 817 characters in each language. Automatic
+supplier-title updates also preserve separate languages and delivery aliases under
+both names, sharing the same inventory and provider product ID.
+
+Translation uses MyMemory's documented public lookup API, sending only public
+listing text, never purchased credentials or API keys. Results are cached locally
+in `storage/cache/offer_translations.sqlite3`. Anonymous usage has a 5,000-character
+daily limit; on an outage or quota exhaustion, preview keeps the source text and
+lets you fill both languages manually. No offer is published automatically by
+requesting a translation preview.
