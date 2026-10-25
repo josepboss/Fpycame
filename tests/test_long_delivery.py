@@ -108,7 +108,7 @@ class LongDeliveryTests(unittest.TestCase):
 
     def test_missing_schema_removes_only_long_complete_mc_fields(self):
         token='M.C'+'X'*120
-        for separator in ['|',':','----',';',' ']:
+        for separator in ['|',':','----',';',',',' ']:
             record=separator.join(['user','password',token,'auth'])
             with self.subTest(separator=separator):
                 self.assertEqual(remove_refresh_hints(record),separator.join(['user','password','','auth']))
@@ -116,6 +116,27 @@ class LongDeliveryTests(unittest.TestCase):
         self.assertEqual(remove_refresh_hints('M.C'+'X'*96),'M.C'+'X'*96)
         self.assertEqual(remove_refresh_hints('auth|'+'Z'*200),'auth|'+'Z'*200)
         self.assertEqual(remove_refresh_hints('prefixM.C'+'X'*120),'prefixM.C'+'X'*120)
+
+    def test_comma_delimited_refresh_tokens_are_removed_before_initial_delivery(self):
+        token='M.C'+'X'*420
+        records=[f'user{n}----pass{n}----mail{n}@example.test,password,client,{token}----2fa{n}----auth{n}' for n in (1,2)]
+        text,_=format_products(records,translate,split_long=False)
+        for n in (1,2):
+            self.assertIn(f'user{n}----pass{n}',text)
+            self.assertIn(f'mail{n}@example.test,password,client,----2fa{n}----auth{n}',text)
+        self.assertNotIn(token,text)
+        self.assertNotIn('Part 1/',text)
+        # Removal only affects the buyer preview, never the stored records.
+        self.assertTrue(all(token in record for record in records))
+
+    def test_explicit_comma_schema_keeps_mc_password_but_omits_refresh(self):
+        password='M.C'+'P'*110
+        refresh='M.C'+'R'*420
+        text,_=format_products([f'user,{password},{refresh},auth'],translate,
+            'username,password,refresh_token,auth_token',split_long=False)
+        self.assertIn(password,text)
+        self.assertNotIn(refresh,text)
+        self.assertIn('Auth token: auth',text)
 
     def test_schema_mismatch_falls_back_without_wrong_labels(self):
         text,_=format_products(['user|password|M.C'+'X'*120+'|auth'],translate,'username:password:auth_token')

@@ -69,7 +69,7 @@ def configured_fields(product: str, spec: str) -> list[tuple[str,str]] | None:
 
 def remove_refresh_hints(product: str) -> str:
     # Stop before ---- even though '-' can occur inside the token itself.
-    pattern=r'(^|[|:;\s]|----)(M\.C(?:(?!----)[A-Za-z0-9_.!*+$%/=-]){97,})(?=$|[|:;\s]|----)'
+    pattern=r'(^|[|:;,\s]|----)(M\.C(?:(?!----)[A-Za-z0-9_.!*+$%/=-]){97,})(?=$|[|:;,\s]|----)'
     return re.sub(pattern,lambda match: match[1],product)
 
 
@@ -131,7 +131,7 @@ def split_rejected_text(text: str, translate: Callable[...,str]) -> str:
         nonlocal count
         # Separators are preserved, making short username/password/etc readable
         # without splitting those credentials merely because a record is long.
-        pieces=re.split(r'(----|[|:;])',match[0])
+        pieces=re.split(r'(----|[|:;,])',match[0])
         result=[]
         for piece in pieces:
             if len(piece)<=80:
