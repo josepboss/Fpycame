@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request, Depends
 from admin.templating import templates
 from fastapi.staticfiles import StaticFiles
 from admin.auth import get_current_user, translate
-from admin.routes import lots, settings, logs, status, providers, import_offers, login
+from admin.routes import lots, settings, logs, status, providers, import_offers, login, analytics
 
 app = FastAPI(title="FunPay Cardinal Admin", version="1.0.0")
 
@@ -11,6 +11,7 @@ app = FastAPI(title="FunPay Cardinal Admin", version="1.0.0")
 async def protect_admin_requests(request: Request, call_next):
     from fastapi.responses import JSONResponse
     request.state.logout_label = translate("auth_logout")
+    request.state.analytics_label = translate("an_title")
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         origin = request.headers.get("origin")
         expected = str(request.base_url).rstrip("/")
@@ -30,6 +31,7 @@ app.mount("/static", StaticFiles(directory="admin/static"), name="static")
 
 # Include routers
 app.include_router(login.router)
+app.include_router(analytics.router, prefix="/analytics", tags=["analytics"], dependencies=[Depends(get_current_user)])
 app.include_router(import_offers.router, prefix="/imports", tags=["imports"], dependencies=[Depends(get_current_user)])
 app.include_router(lots.router, prefix="/lots", tags=["lots"], dependencies=[Depends(get_current_user)])
 app.include_router(settings.router, prefix="/settings", tags=["settings"], dependencies=[Depends(get_current_user)])

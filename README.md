@@ -391,3 +391,17 @@ in `storage/cache/offer_translations.sqlite3`. Anonymous usage has a 5,000-chara
 daily limit; on an outage or quota exhaustion, preview keeps the source text and
 lets you fill both languages manually. No offer is published automatically by
 requesting a translation preview.
+
+### Sales analytics
+
+Open `/analytics/` in the authenticated admin and click **Refresh from FunPay**.
+The background refresh reads historical sales without purchasing products or
+sending buyer messages. The page shows completed sales, units, gross revenue,
+pending orders and refunds for 7/30/90/365 days or all time, with offer rankings
+by completed sales or gross revenue. Currencies are reported separately.
+Revenue is the order amount reported by FunPay, not profit or net payout.
+Rankings group historical descriptions within each category; renamed offers can
+appear separately. Refresh again to pick up new orders and changed statuses.
+Snapshots persist in `storage/cache/sales_analytics.sqlite3`; an incomplete or
+failed refresh preserves the previous snapshot. Refresh runs inside the admin
+process, so restart it only after refreshing finishes, or refresh again afterward.

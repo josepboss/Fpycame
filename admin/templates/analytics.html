@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-3">{{ _('an_title') }}</h1>
+<p class="text-gray-600 mb-4">{{ _('an_note') }}</p>
+<form method="post" action="/analytics/refresh" class="mb-4">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button class="bg-blue-600 text-white px-4 py-2 rounded">{{ _('an_refresh') }}</button>
+<span class="ml-3">{{ _('an_updated') }}: {{ meta.updated|timestamp_to_str if meta and meta.updated else '—' }}</span>
+</form>
+{% if meta and meta.state == 'running' %}<p class="mb-4 text-blue-700">{{ _('an_running') }}</p>{% endif %}
+{% if meta and meta.state == 'failed' %}<p class="mb-4 text-red-700">{{ _('an_failed') }}</p>{% endif %}
+<form method="get" class="flex gap-3 mb-6">
+<select name="days" class="border p-2">
+{% for value in [7,30,90,365,0] %}<option value="{{ value }}" {% if days==value %}selected{% endif %}>{{ value if value else _('an_all') }} {{ _('an_days') if value else '' }}</option>{% endfor %}
+</select>
+<select name="ranking" class="border p-2"><option value="sales" {% if ranking=='sales' %}selected{% endif %}>{{ _('an_sales') }}</option><option value="revenue" {% if ranking=='revenue' %}selected{% endif %}>{{ _('an_revenue') }}</option></select>
+<button class="border rounded p-2">{{ _('an_apply') }}</button>
+</form>
+{% for total in totals %}
+<h2 class="font-bold text-xl mb-3">{{ total.currency }}</h2>
+<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+{% for key in ['sales','units','revenue','pending','refunds'] %}<div class="bg-gray-100 rounded p-4"><p>{{ _('an_'+key) }}</p><strong class="text-2xl">{{ '%.2f'|format(total[key]) if key=='revenue' else total[key] }}</strong></div>{% endfor %}
+</div>
+<div class="overflow-x-auto mb-6"><table class="w-full text-left"><thead><tr>{% for key in ['offer','sales','units','revenue'] %}<th class="p-2 border-b">{{ _('an_'+key) }}</th>{% endfor %}</tr></thead>
+<tbody>{% for item in groups[total.currency] %}<tr><td class="p-2 border-b">{{ item.title }}<small class="block text-gray-500">{{ item.category }}</small></td><td class="p-2 border-b">{{ item.sales }}</td><td class="p-2 border-b">{{ item.units }}</td><td class="p-2 border-b">{{ '%.2f'|format(item.revenue) }}</td></tr>{% endfor %}</tbody></table></div>
+{% else %}<p>{{ _('an_empty') }}</p>{% endfor %}
+{% endblock %}
