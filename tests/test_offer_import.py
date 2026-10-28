@@ -121,6 +121,12 @@ class ProductTests(unittest.TestCase):
             with self.subTest(html=html), self.assertRaises(ImportFailure):
                 new_offer_fields(html, 1259)
 
+    def test_offer_limit_page_has_specific_error(self):
+        with self.assertRaisesRegex(ImportFailure, '^oi_offer_limit$'):
+            new_offer_fields('<div class="page-content">There are too many offers in the Accounts section; please delete the irrelevant ones (1).</div>', 1259)
+        with self.assertRaisesRegex(ImportFailure, '^oi_bad_form$'):
+            new_offer_fields('<h1>Sign in</h1>', 1259)
+
     def test_remote_rejection_details_are_sanitized_and_redacted(self):
         details = rejection_details({'error': '<b>Invalid request</b>', 'errors': [
             ['price', 'Too low'], ['csrf_token', 'Invalid secret-token'],

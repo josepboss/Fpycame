@@ -820,3 +820,4 @@ oi_translation_failed = 'Automatic translation is unavailable or its daily limit
 oi_translation_limits = 'Each title must have 1–100 characters and each description 1–817 characters.'
 
 oi_instant_delivery = 'instant delivery'
+oi_offer_limit = 'FunPay has reached the offer limit for this category. Delete an irrelevant offer on FunPay, then retry publishing.'

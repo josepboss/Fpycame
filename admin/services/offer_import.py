@@ -181,6 +181,8 @@ def new_offer_fields(html: str, node: int) -> dict[str, str]:
     soup = BeautifulSoup(html, "lxml")
     form = soup.select_one("form.form-offer-editor")
     if form is None:
+        if "there are too many offers" in soup.get_text(" ", strip=True).lower():
+            raise ImportFailure("oi_offer_limit")
         raise ImportFailure("oi_bad_form")
     fields = {}
     for element in form.select("input[name], textarea[name], select[name]"):
