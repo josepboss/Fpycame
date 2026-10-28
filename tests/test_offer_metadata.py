@@ -12,6 +12,10 @@ URL='https://hstora.com/en/product/1358-old-title'
 
 class MetadataTests(unittest.TestCase):
     def setUp(self):
+        title_policy=patch('admin.services.offer_stock.imported_title',side_effect=lambda title,language='en':title)
+        title_policy.start();self.addCleanup(title_policy.stop)
+        prefix_check=patch('admin.services.offer_stock.has_delivery_prefix',return_value=True)
+        prefix_check.start();self.addCleanup(prefix_check.stop)
         translation=patch('admin.services.offer_translation.translate_text',side_effect=lambda text,source,target:text)
         translation.start();self.addCleanup(translation.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
@@ -58,6 +62,19 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(auto['New English title']['productsFileName'],auto['Новое название']['productsFileName'])
         self.assertEqual(stock.mappings()[0]['title'],'New English title')
         self.assertEqual(stock.mappings()[0]['supplier_title'],'Новое название')
+
+    def test_existing_import_gains_prefix_without_losing_custom_title_or_alias(self):
+        from admin.services.offer_titles import imported_title, has_delivery_prefix
+        self.current.title=self.original.title
+        self.current.price=self.original.price
+        with patch.object(stock,'imported_title',side_effect=imported_title),patch.object(stock,'has_delivery_prefix',side_effect=has_delivery_prefix):
+            stock.sync_metadata(self.account)
+        self.assertEqual(self.fields.title_en,'instant delivery Old title')
+        self.assertEqual(self.fields.title_ru,'мгновенная доставка Old title')
+        api,auto=delivery.read_configs()
+        self.assertIn('Old title',api)
+        self.assertIn('instant delivery Old title',api)
+        self.assertEqual(auto['Old title']['productsFileName'],auto['instant delivery Old title']['productsFileName'])
 
     def test_deleting_old_alias_preserves_shared_inventory(self):
         from fastapi.testclient import TestClient

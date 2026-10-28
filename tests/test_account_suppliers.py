@@ -14,6 +14,10 @@ from plugins.providers import accounts, fulfillment
 
 class SupplierTests(unittest.TestCase):
     def setUp(self):
+        title_policy=patch('admin.services.offer_stock.imported_title',side_effect=lambda title,language='en':title)
+        title_policy.start();self.addCleanup(title_policy.stop)
+        prefix_check=patch('admin.services.offer_stock.has_delivery_prefix',return_value=True)
+        prefix_check.start();self.addCleanup(prefix_check.stop)
         translation=patch('admin.services.offer_translation.translate_text',side_effect=lambda text,source,target:text)
         translation.start();self.addCleanup(translation.stop)
         self.temp = tempfile.TemporaryDirectory()

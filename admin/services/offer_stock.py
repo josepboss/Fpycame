@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 from admin.services.offer_import import fetch_live_stock, product_url, fetch_product, selling_price, supplier_url, usd_cost
 from admin.services.delivery_mapping import alias_delivery_mapping
 from admin.services.offer_translation import bilingual_text
+from admin.services.offer_titles import imported_title, has_delivery_prefix
 
 DB_PATH = Path("storage/cache/offer_stock.sqlite3")
 PUBLICATIONS_DB = Path("storage/cache/offer_imports.sqlite3")
@@ -199,7 +200,8 @@ def sync_metadata(account, cardinal=None) -> None:
                 if product.product_id != mapping['product']:
                     raise ValueError('Supplier product mismatch')
                 target_title=product.title[:100].rstrip()
-                title_changed=product.title != (mapping['supplier_title'] or mapping['title'])
+                supplier_title_changed=product.title != (mapping['supplier_title'] or mapping['title'])
+                title_changed=supplier_title_changed or not has_delivery_prefix(mapping['title'])
                 price_changed=bool(mapping['price_sync_pending']) or (mapping['supplier_price'] is not None and Decimal(product.price) != Decimal(mapping['supplier_price']))
                 if title_changed and (not target_title or '\n' in product.title or '\r' in product.title):
                     raise ValueError('Supplier title is not a valid FunPay title')
@@ -211,9 +213,10 @@ def sync_metadata(account, cardinal=None) -> None:
                         raise ValueError('Offer identity mismatch')
                 changed=False
                 if title_changed:
-                    translated_titles=bilingual_text(product.title,100)
-                    target_title=translated_titles['en']
-                    target_title_ru=translated_titles['ru']
+                    translated_titles=(bilingual_text(product.title,100) if supplier_title_changed else
+                        {'en':mapping['title'],'ru':fields.title_ru or bilingual_text(product.title,100)['ru']})
+                    target_title=imported_title(translated_titles['en'])
+                    target_title_ru=imported_title(translated_titles['ru'],'ru')
                     if any('\n' in name or '\r' in name for name in translated_titles.values()):
                         raise ValueError('Invalid translated title')
                     existing=account.get_my_subcategory_lots(mapping['node'],locale='en')

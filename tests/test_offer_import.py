@@ -144,6 +144,8 @@ class ProductTests(unittest.TestCase):
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
+        title_policy=patch('admin.routes.import_offers.imported_title',side_effect=lambda title,language='en':title)
+        title_policy.start();self.addCleanup(title_policy.stop)
         translation=patch('admin.services.offer_translation.translate_text',side_effect=lambda text,source,target:text)
         translation.start();self.addCleanup(translation.stop)
         self.temp = tempfile.TemporaryDirectory()
@@ -261,6 +263,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(soup.select_one('input[name="title_ru"]')['value'],'Русский заголовок')
         self.assertEqual(soup.select_one('textarea[name="description_ru"]').text,'Русское описание')
         self.assertEqual(soup.select_one('input[name="title"]')['value'],'')
+
+    def test_imported_title_prefix_is_saved_in_payload_and_mapping(self):
+        from admin.services.offer_titles import imported_title
+        from admin.services.delivery_mapping import read_configs
+        from bs4 import BeautifulSoup
+        with patch.object(routes,'imported_title',side_effect=imported_title):
+            draft=self.preview()
+            response=self.publish(draft)
+        self.assertIn('Offer published successfully',response.text)
+        fields=self.account.session.post.call_args.kwargs['data']
+        self.assertEqual(fields['fields[summary][en]'],'instant delivery '+self.product.title)
+        self.assertTrue(fields['fields[summary][ru]'].startswith('мгновенная доставка '))
+        api,auto=read_configs()
+        self.assertIn('instant delivery '+self.product.title,api)
+        self.assertEqual(api['instant delivery '+self.product.title]['product_id'],'1358')
 
     def test_publish_requires_csrf(self):
         draft = self.preview()

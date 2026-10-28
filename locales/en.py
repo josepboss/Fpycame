@@ -818,3 +818,5 @@ oi_translation_hint = 'Both languages are filled automatically. Review or edit b
 oi_translation_failed = 'Automatic translation is unavailable or its daily limit was reached. Fill in both language versions manually, or retry the preview later.'
 
 oi_translation_limits = 'Each title must have 1–100 characters and each description 1–817 characters.'
+
+oi_instant_delivery = 'instant delivery'

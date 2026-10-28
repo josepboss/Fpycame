@@ -28,6 +28,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from admin.services.offer_translation import bilingual_listing, bilingual_text, source_listing, CYRILLIC
 
+from admin.services.offer_titles import imported_title
+
 router = APIRouter()
 logger = logging.getLogger("FPC.admin.import")
 DB_PATH = Path("storage/cache/offer_imports.sqlite3")
@@ -61,6 +63,9 @@ def render(request: Request, **context) -> Response:
         product = dict(product)
         listing = source_listing(product.get('title',''),product.get('description',''))
         listing.update(product.get('listing') or {})
+        for listing_language in ('en','ru'):
+            key = 'title_'+listing_language
+            listing[key] = imported_title(listing.get(key,''),listing_language)
         product['listing'] = listing
         context['product'] = product
     stock_mappings = offer_stock.mappings()
@@ -146,6 +151,7 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
         description_ru = description_ru.replace('\r\n','\n').replace('\r','\n').strip() or bilingual_text(description,817)['ru']
         if not 1 <= len(title_ru) <= 100 or not 1 <= len(description_ru) <= 817:
             raise ImportFailure('oi_translation_limits')
+        title, title_ru = imported_title(title), imported_title(title_ru,'ru')
         values.update(title=title,description=description,title_ru=title_ru,description_ru=description_ru)
         price = selling_price(usd_cost(product["price"], product.get("currency", "USD"), rub_per_usd), markup)
         current = (fetch_product(product["url"]) if provider == "hstore" else
