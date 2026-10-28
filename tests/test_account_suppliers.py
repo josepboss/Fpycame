@@ -50,6 +50,17 @@ class SupplierTests(unittest.TestCase):
         self.assertEqual((p.provider,p.product_id,p.minimum_order,p.stock),('dark',1358,2,0))
         self.assertIn('Instructions',p.description)
 
+    def test_darkstore_structured_primary_product(self):
+        url = 'https://dark.shopping/product/demo'
+        html = '<script type="application/ld+json">{"@type":"Product","url":"'+url+'","productID":"1358"}</script><div data-product-id="99"></div>'
+        self.assertEqual(imports.darkstore_product_id(html,url),1358)
+        with self.assertRaises(imports.ImportFailure):
+            imports.darkstore_product_id(html,url+'-other')
+        with self.assertRaises(imports.ImportFailure):
+            imports.darkstore_product_id('<div data-product-id="99"></div>',url)
+        with self.assertRaises(imports.ImportFailure):
+            imports.darkstore_product_id(html+html.replace('1358','1359'),url)
+
     def test_manual_products_and_unknown_hosts_rejected(self):
         with patch.object(accounts.AccountSupplier,'product',return_value={'id':1358,'is_manual_order_delivery':1}):
             with self.assertRaises(imports.ImportFailure):imports.fetch_product('https://dark.shopping/product/1358')

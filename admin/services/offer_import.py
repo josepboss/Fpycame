@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import configparser
+import json
 import re
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation, ROUND_UP
@@ -298,6 +299,37 @@ def supplier_url(value: str) -> tuple[str, str, int | None]:
     return provider, value.strip(), identifier
 
 
+def darkstore_product_id(html: str, url: str) -> int:
+    """Read the primary product only, never IDs from recommendation cards."""
+    soup = BeautifulSoup(html, 'lxml')
+    identities = set()
+    for script in soup.select('script[type="application/ld+json"]'):
+        try:
+            value = json.loads(script.get_text())
+        except (ValueError, TypeError):
+            continue
+        nodes = value if isinstance(value, list) else [value]
+        for node in list(nodes):
+            if isinstance(node, dict) and isinstance(node.get('@graph'), list):
+                nodes.extend(node['@graph'])
+        for node in nodes:
+            if not isinstance(node, dict) or node.get('@type') != 'Product':
+                continue
+            if node.get('url', '').rstrip('/') != url.rstrip('/'):
+                continue
+            identifier = str(node.get('productID', node.get('sku', '')))
+            if re.fullmatch(r'[1-9][0-9]*', identifier):
+                identities.add(int(identifier))
+    if not identities:
+        for card in soup.select('.card-product[data-product-id]'):
+            identifier = str(card['data-product-id'])
+            if re.fullmatch(r'[1-9][0-9]*', identifier):
+                identities.add(int(identifier))
+    if len(identities) != 1:
+        raise ImportFailure('oi_bad_product')
+    return identities.pop()
+
+
 def fetch_account_product(url: str, expected_id: int | None = None) -> Product:
     from plugins.providers.accounts import AccountSupplier, SupplierError
     provider, url, product_id = supplier_url(url)
@@ -310,10 +342,7 @@ def fetch_account_product(url: str, expected_id: int | None = None) -> Product:
             response = requests.get(url, timeout=(10, 30), allow_redirects=False)
             if response.status_code != 200:
                 raise ImportFailure('oi_fetch_failed')
-            card = BeautifulSoup(response.text, 'lxml').select_one('.card-product[data-product-id]')
-            if card is None:
-                raise ImportFailure('oi_bad_product')
-            product_id = int(card['data-product-id'])
+            product_id = darkstore_product_id(response.text, url)
         data = AccountSupplier(provider).product(product_id)
         if isinstance(data.get('id'), bool) or int(data['id']) != product_id:
             raise ImportFailure('oi_bad_product')
