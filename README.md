@@ -432,3 +432,16 @@ SMM orders start the timer only after the provider reports service completion;
 placement acknowledgments and partial/failed services do not qualify. Historical
 and manual deliveries are not inferred or backfilled. No requests are sent until
 the feature is enabled with a token and channel configured.
+
+Discord confirmation requests combine eligible orders into one message per check,
+with a persistent five-minute minimum gap between channel batches. Up to 75
+orders fit into a batch; additional orders wait for a later batch. Each order
+retains the shared message receipt, so none is resent after a restart.
+
+Discord reminder errors also go to Cardinal's configured Telegram notification
+chats as important alerts. They include order IDs and sanitized error metadata,
+never Discord tokens or raw response bodies. Failed/uncertain send alerts are
+suppressed after the first notification; temporary lookup, rate-limit and monitor
+errors repeat at most hourly. Pending alerts survive restarts. Configure Cardinal
+Telegram notification chats to receive them; failed Telegram deliveries still
+appear in Cardinal's existing Telegram logs.

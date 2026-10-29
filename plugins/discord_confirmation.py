@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import logging
+import json
+import time
+from html import escape
 from threading import Thread
 from time import sleep
 from typing import TYPE_CHECKING
 
-from Utils.discord_confirmation import check_reminders, record_delivery
+from Utils.discord_confirmation import check_reminders, record_delivery, database, queue_alert
+from locales.localizer import Localizer
 
 if TYPE_CHECKING:
     from cardinal import Cardinal
@@ -21,6 +25,41 @@ SETTINGS_PAGE = False
 BIND_TO_DELETE = None
 logger = logging.getLogger('FPC.discord_confirmation')
 _worker: Thread | None = None
+
+
+def notify_errors(cardinal: Cardinal) -> None:
+    if cardinal.telegram is None:
+        return
+    # Recover alerts for failed/uncertain sends, including a crash during POST.
+    with database() as db:
+        reviews=db.execute("SELECT order_id FROM reminders WHERE account=? AND state IN ('review','sending')",(cardinal.account.id,)).fetchall()
+        alerted=set()
+        for row in db.execute("SELECT orders FROM alerts WHERE account=? AND code IN ('send','review')",(cardinal.account.id,)):
+            alerted.update(json.loads(row['orders']))
+    for row in reviews:
+        if row['order_id'] not in alerted:
+            queue_alert(cardinal.account.id,'review',[row['order_id']])
+    with database() as db:
+        alerts=db.execute('SELECT * FROM alerts WHERE account=? AND pending=1',(cardinal.account.id,)).fetchall()
+    from tg_bot import utils
+    localizer=Localizer()
+    for row in alerts:
+        text=localizer.translate('dc_alert_title')+'\n'+localizer.translate('dc_alert_'+row['code'])
+        orders=json.loads(row['orders'])
+        if orders:
+            text+='\n'+escape(', '.join('#'+order for order in orders))
+        if row['detail']:
+            text+='\n'+escape(row['detail'])
+        with database() as db:
+            claimed=db.execute('UPDATE alerts SET pending=0,notified=? WHERE account=? AND key=? AND pending=1',
+                               (time.time(),cardinal.account.id,row['key'])).rowcount
+        if claimed:
+            try:
+                cardinal.telegram.send_notification(text,notification_type=utils.NotificationTypes.important_announcement)
+            except Exception:
+                with database() as db:
+                    db.execute('UPDATE alerts SET pending=1 WHERE account=? AND key=?',(cardinal.account.id,row['key']))
+                raise
 
 
 def delivered(cardinal: Cardinal, event: NewOrderEvent) -> None:
@@ -47,6 +86,14 @@ def start(cardinal: Cardinal) -> None:
                     check_reminders(cardinal.account)
                 except Exception as exc:
                     logger.warning('Discord confirmation cycle deferred (%s).',type(exc).__name__)
+                    try:
+                        queue_alert(cardinal.account.id,'monitor',[],type(exc).__name__,repeat=True)
+                    except Exception:
+                        logger.warning('Could not persist Discord monitor alert.')
+                try:
+                    notify_errors(cardinal)
+                except Exception as exc:
+                    logger.warning('Discord Telegram alert deferred (%s).',type(exc).__name__)
             sleep(60)
     _worker=Thread(target=loop,name='discord-confirmation',daemon=True)
     _worker.start()

@@ -70,7 +70,26 @@ class DiscordConfirmationTests(unittest.TestCase):
         self.check(post)
         self.check(post)
         self.assertEqual(post.call_count,1)
-        self.assertEqual(self.state()['retry_at'],100120)
+        self.assertEqual(self.state()['retry_at'],100300)
+
+    def test_multiple_orders_share_one_message_and_receipt(self):
+        self.delivered()
+        with patch.object(dc.time,'time',return_value=1):
+            dc.record_delivery(7,'SECOND12')
+        self.account.get_order.side_effect=lambda order_id,**kw:Obj(id=order_id,status=Obj(name='PAID'))
+        post=Mock(return_value=Obj(status_code=200,json=lambda:dict(id='123',channel_id=CHANNEL)))
+        self.check(post)
+        post.assert_called_once()
+        content=post.call_args.kwargs['json']['content']
+        self.assertIn('#BAZC7KM2',content)
+        self.assertIn('#SECOND12',content)
+        self.assertEqual(content.count('confirm please.'),1)
+        with dc.database() as db:
+            rows=db.execute('SELECT state,message_id FROM reminders').fetchall()
+        self.assertTrue(all(r['state']=='sent' and r['message_id']=='123' for r in rows))
+        with patch.object(dc.time,'time',return_value=1):dc.record_delivery(7,'THIRD123')
+        self.check(post)
+        self.assertEqual(post.call_count,1)
     def test_fresh_funpay_lookup_failure_does_not_post(self):
         self.delivered()
         self.account.get_order.side_effect=TimeoutError()
@@ -102,3 +121,23 @@ class DiscordConfirmationTests(unittest.TestCase):
         dc.save_settings(False,CHANNEL,'')
         self.assertEqual(dc.settings()['token'],'private-test-token')
         self.assertEqual(dc.CONFIG_PATH.stat().st_mode & 0o777,0o600)
+
+    def test_error_alert_sent_to_telegram_only_once_and_without_token(self):
+        self.delivered()
+        self.check(Mock(side_effect=requests.Timeout()))
+        cardinal=Obj(account=self.account,telegram=Obj(send_notification=Mock()))
+        plugin.notify_errors(cardinal)
+        plugin.notify_errors(cardinal)
+        cardinal.telegram.send_notification.assert_called_once()
+        text=cardinal.telegram.send_notification.call_args.args[0]
+        self.assertIn('#BAZC7KM2',text)
+        self.assertNotIn('private-test-token',text)
+
+    def test_lookup_error_dedup_and_alert_waits_for_telegram(self):
+        dc.queue_alert(7,'lookup',['BAZC7KM2'],'TimeoutError',repeat=True)
+        plugin.notify_errors(Obj(account=self.account,telegram=None))
+        cardinal=Obj(account=self.account,telegram=Obj(send_notification=Mock()))
+        plugin.notify_errors(cardinal)
+        dc.queue_alert(7,'lookup',['BAZC7KM2'],'TimeoutError',repeat=True)
+        plugin.notify_errors(cardinal)
+        cardinal.telegram.send_notification.assert_called_once()

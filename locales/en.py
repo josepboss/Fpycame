@@ -874,3 +874,15 @@ dc_waiting = 'Waiting'
 dc_sent = 'Sent'
 
 dc_review = 'Needs review'
+
+dc_alert_title = '⚠️ Discord confirmation reminder error'
+
+dc_alert_lookup = 'Could not verify the FunPay order status. No confirmation request was sent; checking will retry.'
+
+dc_alert_rate_limit = 'Discord rate-limited the request. The batch has been deferred automatically.'
+
+dc_alert_send = 'Discord message failed or its outcome is uncertain. Check the channel before retrying; automatic resending is blocked.'
+
+dc_alert_review = 'A Discord send needs manual review. Check the channel; automatic resending is blocked.'
+
+dc_alert_monitor = 'The Discord reminder monitor encountered an error. Check Cardinal logs.'
