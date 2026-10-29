@@ -113,6 +113,12 @@ def check_pending(crd: Cardinal, request: Callable) -> None:
                     WHERE account=? AND funpay=? AND state='pending' ''',
                     (state, status, int(key is not None), *identity))
             if key and updated.rowcount == 1:
+                if state == 'completed':
+                    try:
+                        from Utils.discord_confirmation import record_delivery
+                        record_delivery(crd.account.id,row['funpay'])
+                    except Exception as exc:
+                        logger.warning('SMM confirmation tracking deferred (%s).',type(exc).__name__)
                 # Persist the terminal status before notifying to prevent repeated
                 # completion/failure messages after a restart or lost chat response.
                 message(crd, row, key, *args)

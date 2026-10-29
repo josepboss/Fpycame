@@ -3,6 +3,22 @@
 <h1 class="text-2xl font-bold mb-4">Settings</h1>
 
 <div class="mb-8 p-4 border rounded">
+    <h2 class="text-xl font-semibold mb-2">{{ _('dc_title') }}</h2>
+    <p class="mb-3 text-gray-600">{{ _('dc_note') }}</p>
+    {% if request.query_params.get('discord_error') %}<p class="text-red-700 mb-3">{{ _('dc_invalid') }}</p>{% endif %}
+    {% if request.query_params.get('discord_saved') %}<p class="text-green-700 mb-3">{{ _('dc_saved') }}</p>{% endif %}
+    <form action="/settings/save_discord" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="block mb-3"><input type="checkbox" name="enabled" value="true" {% if discord.enabled %}checked{% endif %}> {{ _('dc_enable') }}</label>
+        <label class="block mb-3">{{ _('dc_channel') }}<input type="text" name="channel_id" value="{{ discord.channel_id }}" class="border p-2 w-full rounded" inputmode="numeric"></label>
+        <label class="block mb-3">{{ _('dc_token') }}<input type="password" name="token" value="" autocomplete="new-password" class="border p-2 w-full rounded"></label>
+        <p class="mb-3">{{ _('dc_token_saved') if discord_token_saved else _('dc_token_missing') }}</p>
+        <button class="bg-green-600 text-white px-4 py-2 rounded">{{ _('dc_save') }}</button>
+    </form>
+    <p class="mt-3">{{ _('dc_waiting') }}: {{ discord_states.get('waiting',0) }} · {{ _('dc_sent') }}: {{ discord_states.get('sent',0) }} · {{ _('dc_review') }}: {{ discord_states.get('review',0)+discord_states.get('sending',0) }}</p>
+</div>
+
+<div class="mb-8 p-4 border rounded">
     <h2 class="text-xl font-semibold mb-2">FunPay Account</h2>
     <form action="/settings/save_funpay" method="post">
         <div class="mb-4">

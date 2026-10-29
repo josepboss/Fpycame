@@ -848,3 +848,29 @@ an_edit = 'Edit on FunPay'
 an_listed_note = 'These are publicly listed offers from the last refresh, sorted by fewest completed sales in the selected period. Counts match the exact historical title and category, across currencies. Renames may show zero; duplicate titles share counts. Hidden or inactive offers are not included.'
 
 an_no_listings = 'No matching listings. Refresh from FunPay to load current offers.'
+
+dc_title = 'Discord confirmation requests'
+
+dc_note = 'Send one request when an order remains unconfirmed 24 hours after successful delivery. Records new successful deliveries only; manual and past deliveries are not inferred. SMM services start the timer only when completed. Messages use: #ORDER_ID confirm please. Failed or uncertain sends require review and are not automatically retried (rate limits are deferred).'
+
+dc_enable = 'Enable automatic requests'
+
+dc_channel = 'Discord support channel ID'
+
+dc_token = 'Discord user account token (leave blank to keep saved token)'
+
+dc_token_saved = 'Token saved. Blank keeps the existing token.'
+
+dc_token_missing = 'No token saved.'
+
+dc_save = 'Save Discord settings'
+
+dc_invalid = 'Enter a valid channel ID and token before enabling.'
+
+dc_saved = 'Settings saved. The running Cardinal monitor reads changes automatically.'
+
+dc_waiting = 'Waiting'
+
+dc_sent = 'Sent'
+
+dc_review = 'Needs review'

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse
 from admin.templating import templates
 import configparser
+from admin.auth import get_csrf_token, validate_csrf_token, translate
+from Utils import discord_confirmation
 
 router = APIRouter()
 
@@ -16,9 +18,16 @@ async def show_settings(request: Request):
     main_cfg.read(MAIN_CFG, encoding="utf-8")
     api_cfg = configparser.ConfigParser(interpolation=None)
     api_cfg.read(API_KEYS_CFG, encoding="utf-8")
+    discord = discord_confirmation.settings()
+    with discord_confirmation.database() as db:
+        reminder_states = dict(db.execute('SELECT state,COUNT(*) FROM reminders GROUP BY state').fetchall())
 
     return templates.TemplateResponse(request=request, name="settings.html", context={
         "request": request,
+        "discord": {key: value for key,value in discord.items() if key != 'token'},
+        "discord_token_saved": bool(discord['token']),
+        "discord_states": reminder_states,
+        "csrf_token": get_csrf_token(), "_": translate,
         "golden_key": main_cfg.get("FunPay", "golden_key", fallback=""),
         "hstore_key": api_cfg["hstore"].get("api_key", "") if "hstore" in api_cfg else "",
         "hstore_secret": api_cfg["hstore"].get("api_secret", "") if "hstore" in api_cfg else "",
@@ -26,6 +35,18 @@ async def show_settings(request: Request):
         "dark_key": api_cfg["dark"].get("api_key", "") if "dark" in api_cfg else "",
         "djekxa_key": api_cfg["djekxa"].get("api_key", "") if "djekxa" in api_cfg else "",
     })
+
+
+@router.post('/save_discord')
+def save_discord(csrf_token: str = Form(''), channel_id: str = Form(''),
+                 token: str = Form(''), enabled: bool = Form(False)) -> RedirectResponse:
+    if not validate_csrf_token(csrf_token):
+        raise HTTPException(status_code=403)
+    try:
+        discord_confirmation.save_settings(enabled,channel_id,token)
+    except ValueError:
+        return RedirectResponse('/settings/?discord_error=true',status_code=303)
+    return RedirectResponse('/settings/?discord_saved=true',status_code=303)
 
 
 @router.post("/save_funpay")

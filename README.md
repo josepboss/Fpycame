@@ -405,3 +405,30 @@ appear separately. Refresh again to pick up new orders and changed statuses.
 Snapshots persist in `storage/cache/sales_analytics.sqlite3`; an incomplete or
 failed refresh preserves the previous snapshot. Refresh runs inside the admin
 process, so restart it only after refreshing finishes, or refresh again afterward.
+
+### Discord confirmation reminders
+
+The optional **Discord Confirmation Reminders** Cardinal plugin records successful
+new deliveries and waits 24 hours after delivery before requesting confirmation.
+Configure the user account token and support channel ID in admin **Settings**,
+then enable automatic requests. Keep the plugin enabled in Cardinal. Settings
+are read live; the initial plugin installation requires restarting Cardinal,
+and the settings form requires restarting the admin process after deployment.
+The token is stored in ignored `configs/discord_confirmation.cfg` with mode 0600
+and is never returned in the settings page. Do not commit or paste user tokens.
+Discord prohibits self-bots and may terminate the account.
+
+Only a fresh FunPay order lookup reporting `PAID` permits posting
+`#ORDER_ID confirm please.` Confirmed/refunded orders are skipped. The message
+contains no credentials or mentions. Successful message IDs and delivery times
+persist in `storage/cache/discord_confirmation.sqlite3`. Rate limits defer the
+next attempt; network failures, rejected requests, or uncertain receipts require
+manual review without automatic retries. A crash during a send leaves `sending`,
+which also requires review, preventing blind duplicate sends after restart.
+Settings displays waiting/sent/review counts. Review the channel and Cardinal
+logs before resolving any uncertain send; no automatic retry button is provided.
+
+SMM orders start the timer only after the provider reports service completion;
+placement acknowledgments and partial/failed services do not qualify. Historical
+and manual deliveries are not inferred or backfilled. No requests are sent until
+the feature is enabled with a token and channel configured.

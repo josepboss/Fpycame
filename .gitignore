@@ -4,3 +4,6 @@ __pycache__/
 storage/cache/admin_sessions.sqlite3*
 storage/cache/offer_stock.sqlite3*
 storage/cache/offer_locks/
+configs/discord_confirmation.cfg
+storage/cache/discord_confirmation.sqlite3*
+storage/cache/csrf_token.txt
