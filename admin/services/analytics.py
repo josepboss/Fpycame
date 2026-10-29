@@ -23,6 +23,7 @@ def database() -> Iterator[sqlite3.Connection]:
     db.row_factory = sqlite3.Row
     db.execute('CREATE TABLE IF NOT EXISTS sales (account INTEGER, id TEXT, title TEXT, category TEXT, currency TEXT, price TEXT, units INTEGER, status TEXT, date TEXT, PRIMARY KEY(account,id))')
     db.execute('CREATE TABLE IF NOT EXISTS snapshot (id INTEGER PRIMARY KEY, account INTEGER, updated REAL, state TEXT)')
+    db.execute('CREATE TABLE IF NOT EXISTS listings (account INTEGER, id INTEGER, node INTEGER, kind TEXT, title TEXT, category TEXT, PRIMARY KEY(account,kind,id))')
     try:
         with db:
             yield db
@@ -37,6 +38,11 @@ def sync_sales() -> None:
         with database() as db:
             db.execute("INSERT INTO snapshot(id,state) VALUES(1,'running') ON CONFLICT(id) DO UPDATE SET state='running'")
         account = make_account()
+        listings = []
+        for lot in account.get_user(account.id, locale='en').get_lots():
+            sub = lot.subcategory
+            listings.append((account.id,int(lot.id),sub.id,sub.type.name,
+                             lot.description or '',f'{sub.category.name}, {sub.name}'))
         cursor = None
         seen = set()
         rows = {}
@@ -61,6 +67,8 @@ def sync_sales() -> None:
         with database() as db:
             db.execute('DELETE FROM sales WHERE account=?', (account.id,))
             db.executemany('INSERT INTO sales VALUES(?,?,?,?,?,?,?,?,?)', rows.values())
+            db.execute('DELETE FROM listings WHERE account=?', (account.id,))
+            db.executemany('INSERT INTO listings VALUES(?,?,?,?,?,?)', listings)
             db.execute("UPDATE snapshot SET account=?,updated=?,state='ready' WHERE id=1", (account.id,time.time()))
     except Exception as exc:
         logger.error('Sales analytics refresh failed (%s).',type(exc).__name__)
@@ -82,6 +90,7 @@ def report(days: int = 30, ranking: str = 'sales') -> dict:
     with database() as db:
         meta = db.execute('SELECT * FROM snapshot WHERE id=1').fetchone()
         rows = db.execute('SELECT * FROM sales WHERE account=?', (meta['account'],)).fetchall() if meta else []
+        listings = db.execute('SELECT * FROM listings WHERE account=?', (meta['account'],)).fetchall() if meta else []
     cutoff = (datetime.now()-timedelta(days=days)).isoformat() if days else ''
     totals, offers = {}, {}
     for row in rows:
@@ -103,4 +112,14 @@ def report(days: int = 30, ranking: str = 'sales') -> dict:
             item['revenue'] += Decimal(row['price'])
     # Never rank monetary amounts against a different currency.
     groups = {currency:sorted((v for v in offers.values() if v['currency']==currency),key=lambda v:(v[ranking],v['sales']),reverse=True) for currency in totals}
-    return dict(meta=dict(meta) if meta else None,totals=list(totals.values()),groups=groups)
+    current = []
+    for row in listings:
+        matches = [v for v in offers.values() if v['title']==row['title'] and v['category']==row['category']]
+        item = dict(row)
+        item['sales'] = sum(v['sales'] for v in matches)
+        item['units'] = sum(v['units'] for v in matches)
+        item['edit_url'] = (f"https://funpay.com/en/chips/{row['node']}/trade" if row['kind']=='CURRENCY' else
+                            f"https://funpay.com/en/lots/offerEdit?node={row['node']}&offer={row['id']}")
+        current.append(item)
+    current.sort(key=lambda v:(v['sales'],v['title']))
+    return dict(meta=dict(meta) if meta else None,totals=list(totals.values()),groups=groups,listings=current)

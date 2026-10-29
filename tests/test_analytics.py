@@ -24,6 +24,8 @@ class AnalyticsTests(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
     def sync(self, account):
+        if not hasattr(account, "get_user"):
+            account.get_user=lambda *args,**kwargs:Obj(get_lots=lambda:[])
         service._LOCK.acquire()
         with patch('admin.services.offer_import.make_account',return_value=account),patch.object(service.time,'sleep'):
             service.sync_sales()
@@ -58,3 +60,20 @@ class AnalyticsTests(unittest.TestCase):
                 self.assertEqual(client.post('/analytics/refresh',data={'csrf_token':'wrong'}).status_code,403)
         finally:
             app.dependency_overrides.clear()
+
+    def test_current_listings_include_zero_sales_and_edit_links(self):
+        from unittest.mock import Mock
+        sub=Obj(id=1259,type=Obj(name='COMMON'),category=Obj(name='Twitter'),name='Accounts')
+        lots=[Obj(id=123,subcategory=sub,description='Example'),Obj(id=124,subcategory=sub,description='Never sold')]
+        sale=order('A')
+        sale.subcategory_name='Twitter, Accounts'
+        account=Obj(id=1,get_user=Mock(return_value=Obj(get_lots=lambda:lots)),get_sales=Mock(return_value=(None,[sale],'en',{})))
+        self.sync(account)
+        data=service.report(0)
+        self.assertEqual([(v['title'],v['sales']) for v in data['listings']],[('Never sold',0),('Example',1)])
+        self.assertIn('node=1259&offer=124',data['listings'][0]['edit_url'])
+        # Removed listings disappear after refresh; past sales remain in rankings.
+        account.get_user.return_value=Obj(get_lots=lambda:[])
+        self.sync(account)
+        self.assertEqual(service.report(0)['listings'],[])
+        self.assertEqual(service.report(0)['totals'][0]['sales'],1)

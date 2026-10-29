@@ -15,7 +15,14 @@
 </select>
 <select name="ranking" class="border p-2"><option value="sales" {% if ranking=='sales' %}selected{% endif %}>{{ _('an_sales') }}</option><option value="revenue" {% if ranking=='revenue' %}selected{% endif %}>{{ _('an_revenue') }}</option></select>
 <button class="border rounded p-2">{{ _('an_apply') }}</button>
+<label class="p-2"><input type="checkbox" name="zero_only" value="true" {% if zero_only %}checked{% endif %}> {{ _('an_zero_only') }}</label>
 </form>
+<h2 class="font-bold text-xl mb-3">{{ _('an_listed') }}</h2>
+<p class="text-gray-600 mb-3">{{ _('an_listed_note') }}</p>
+<div class="overflow-x-auto mb-8"><table class="w-full text-left">
+<thead><tr>{% for key in ['offer','sales','units','edit'] %}<th class="p-2 border-b">{{ _('an_'+key) }}</th>{% endfor %}</tr></thead>
+<tbody>{% for item in listings %}<tr class="{{ 'bg-yellow-50' if item.sales==0 else '' }}"><td class="p-2 border-b">{{ item.title }}<small class="block text-gray-500">{{ item.category }} · #{{ item.id }}</small></td><td class="p-2 border-b">{{ item.sales }}</td><td class="p-2 border-b">{{ item.units }}</td><td class="p-2 border-b"><a href="{{ item.edit_url }}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">{{ _('an_edit') }}</a></td></tr>
+{% else %}<tr><td colspan="4" class="p-2">{{ _('an_no_listings') }}</td></tr>{% endfor %}</tbody></table></div>
 {% for total in totals %}
 <h2 class="font-bold text-xl mb-3">{{ total.currency }}</h2>
 <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">

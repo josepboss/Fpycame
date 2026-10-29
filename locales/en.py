@@ -838,3 +838,13 @@ an_refunds = 'Refunded orders'
 an_apply = 'Apply'
 an_offer = 'Offer'
 an_empty = 'No sales in this period. Refresh from FunPay to load history.'
+
+an_listed = 'Current FunPay listings'
+
+an_zero_only = 'Only listings with zero sales'
+
+an_edit = 'Edit on FunPay'
+
+an_listed_note = 'These are publicly listed offers from the last refresh, sorted by fewest completed sales in the selected period. Counts match the exact historical title and category, across currencies. Renames may show zero; duplicate titles share counts. Hidden or inactive offers are not included.'
+
+an_no_listings = 'No matching listings. Refresh from FunPay to load current offers.'
