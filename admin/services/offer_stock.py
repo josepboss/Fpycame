@@ -16,6 +16,7 @@ from admin.services.offer_import import fetch_live_stock, product_url, fetch_pro
 from admin.services.delivery_mapping import alias_delivery_mapping
 from admin.services.offer_translation import bilingual_text
 from admin.services.offer_titles import imported_title, has_delivery_prefix
+from admin.services.offer_descriptions import imported_description, POLICY_VERSION
 
 DB_PATH = Path("storage/cache/offer_stock.sqlite3")
 PUBLICATIONS_DB = Path("storage/cache/offer_imports.sqlite3")
@@ -45,6 +46,8 @@ def database() -> Iterator[sqlite3.Connection]:
                     db.execute(f'ALTER TABLE mappings ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0')
             if 'rub_per_usd' not in columns:
                 db.execute('ALTER TABLE mappings ADD COLUMN rub_per_usd TEXT')
+            if 'description_policy' not in columns:
+                db.execute('ALTER TABLE mappings ADD COLUMN description_policy INTEGER NOT NULL DEFAULT 0')
             from admin.services.provider_schema import scope_provider
             scope_provider(db, 'mappings')
             yield db
@@ -207,11 +210,16 @@ def sync_metadata(account, cardinal=None) -> None:
                     raise ValueError('Supplier title is not a valid FunPay title')
                 markup=mapping['markup'] if mapping['markup_confirmed'] else None
                 fields=None
-                if title_changed or (price_changed and markup is not None):
+                policy_changed=mapping['description_policy'] < POLICY_VERSION
+                if title_changed or (price_changed and markup is not None) or policy_changed:
                     fields=account.get_lot_fields(mapping['offer_id'])
                     if int(fields.lot_id)!=mapping['offer_id'] or str(fields.fields.get('node_id'))!=str(mapping['node']):
                         raise ValueError('Offer identity mismatch')
                 changed=False
+                if policy_changed:
+                    fields.description_en=imported_description(fields.description_en)
+                    fields.description_ru=imported_description(fields.description_ru,'ru')
+                    changed=True
                 if title_changed:
                     translated_titles=(bilingual_text(product.title,100) if supplier_title_changed else
                         {'en':mapping['title'],'ru':fields.title_ru or bilingual_text(product.title,100)['ru']})
@@ -243,7 +251,11 @@ def sync_metadata(account, cardinal=None) -> None:
                         raise ValueError('Title update not confirmed')
                     if target_price and Decimal(str(saved.price))!=Decimal(target_price):
                         raise ValueError('Price update not confirmed')
+                    if policy_changed and (saved.description_en!=fields.description_en or saved.description_ru!=fields.description_ru):
+                        raise ValueError('Description policy update not confirmed')
                 with database() as db:
+                    if policy_changed:
+                        db.execute('UPDATE mappings SET description_policy=? WHERE account=? AND node=? AND product=? AND provider=?',(POLICY_VERSION,*identity))
                     db.execute("""UPDATE mappings SET title=?,supplier_title=?,supplier_price=?,source_url=?,
                         price_sync_pending=CASE WHEN markup IS ? AND markup_confirmed=? THEN 0 ELSE price_sync_pending END,
                         last_error=CASE WHEN last_error LIKE 'Metadata:%' THEN '' ELSE last_error END

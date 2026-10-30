@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, urlsplit
 from admin.services.offer_translation import bilingual_listing, bilingual_text, source_listing, CYRILLIC
 
 from admin.services.offer_titles import imported_title
+from admin.services.offer_descriptions import imported_description
 
 router = APIRouter()
 logger = logging.getLogger("FPC.admin.import")
@@ -66,6 +67,9 @@ def render(request: Request, **context) -> Response:
         for listing_language in ('en','ru'):
             key = 'title_'+listing_language
             listing[key] = imported_title(listing.get(key,''),listing_language)
+            key = 'description_'+listing_language
+            if listing.get(key):
+                listing[key] = imported_description(listing[key],listing_language)
         product['listing'] = listing
         context['product'] = product
     stock_mappings = offer_stock.mappings()
@@ -152,6 +156,8 @@ def publish(request: Request, draft: str = Form(...), title: str = Form(...),
         if not 1 <= len(title_ru) <= 100 or not 1 <= len(description_ru) <= 817:
             raise ImportFailure('oi_translation_limits')
         title, title_ru = imported_title(title), imported_title(title_ru,'ru')
+        description = imported_description(description)
+        description_ru = imported_description(description_ru,'ru')
         values.update(title=title,description=description,title_ru=title_ru,description_ru=description_ru)
         price = selling_price(usd_cost(product["price"], product.get("currency", "USD"), rub_per_usd), markup)
         current = (fetch_product(product["url"]) if provider == "hstore" else

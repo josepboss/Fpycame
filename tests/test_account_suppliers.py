@@ -235,7 +235,7 @@ class SupplierTests(unittest.TestCase):
             old_title=p.title
             delivery.save_delivery_mapping(old_title,provider,str(p.product_id),True,imported=True,delivery_format='username|password')
             stock.save_mapping(7,1259,p.to_dict(),old_title,111,markup='50',rub_per_usd='100')
-            fields=SimpleNamespace(lot_id=111,fields={'node_id':'1259'},title_en=old_title,title_ru=old_title,price=0.75)
+            fields=SimpleNamespace(lot_id=111,fields={'node_id':'1259'},title_en=old_title,title_ru=old_title,price=0.75,description_en='Details',description_ru='Описание')
             account=Mock(id=7)
             account.get_lot_fields.return_value=fields
             account.get_my_subcategory_lots.return_value=[]

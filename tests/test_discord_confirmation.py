@@ -28,7 +28,7 @@ class DiscordConfirmationTests(unittest.TestCase):
     def delivered(self,ago=86401):
         with patch.object(dc.time,'time',return_value=100000-ago):dc.record_delivery(7,'BAZC7KM2')
     def check(self,post):
-        with patch.object(dc.time,'time',return_value=100000),patch.object(dc.time,'sleep'),patch.object(dc.requests,'post',post):
+        with patch.object(dc.time,'time',return_value=100000),patch.object(dc.time,'sleep'),patch.object(dc.requests,'post',post),patch('Utils.confirmation_review.assess',return_value=''):
             dc.check_reminders(self.account)
     def state(self):
         with dc.database() as db:return db.execute('SELECT * FROM reminders').fetchone()
@@ -141,3 +141,33 @@ class DiscordConfirmationTests(unittest.TestCase):
         dc.queue_alert(7,'lookup',['BAZC7KM2'],'TimeoutError',repeat=True)
         plugin.notify_errors(cardinal)
         cardinal.telegram.send_notification.assert_called_once()
+
+    def test_conversation_hold_prevents_discord_submission(self):
+        self.delivered()
+        post=Mock()
+        with patch.object(dc.time,'time',return_value=100000),patch('Utils.confirmation_review.assess',return_value='buyer_problem'),patch.object(dc.requests,'post',post):
+            dc.check_reminders(self.account)
+        post.assert_not_called()
+        self.assertEqual(self.state()['state'],'held')
+        self.assertEqual(self.state()['hold_reason'],'buyer_problem')
+
+    def test_unreadable_conversation_is_excluded_but_can_retry(self):
+        self.delivered()
+        with patch.object(dc.time,'time',return_value=100000),patch('Utils.confirmation_review.assess',return_value='history_unavailable'):
+            report=dc.backup_orders(self.account)
+        self.assertEqual(report['ready'],[])
+        self.assertEqual(self.state()['state'],'waiting')
+        self.assertEqual(report['held'][0]['hold_reason'],'history_unavailable')
+
+    def test_disabled_discord_sends_copyable_backup_without_changing_order_state(self):
+        self.delivered()
+        dc.save_settings(False,CHANNEL)
+        cardinal=Obj(account=self.account,telegram=Obj(send_notification=Mock()))
+        with patch.object(dc.time,'time',return_value=100000),patch('Utils.confirmation_review.assess',return_value=''):
+            plugin.send_backup(cardinal)
+            calls=cardinal.telegram.send_notification.call_count
+            plugin.send_backup(cardinal)
+        self.assertEqual(cardinal.telegram.send_notification.call_count,calls)
+        text='\n'.join(call.args[0] for call in cardinal.telegram.send_notification.call_args_list)
+        self.assertIn('<code>#BAZC7KM2 confirm please.</code>',text)
+        self.assertEqual(self.state()['state'],'waiting')

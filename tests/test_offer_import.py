@@ -1,3 +1,4 @@
+from admin.services.offer_descriptions import imported_description
 import tempfile
 import unittest
 from pathlib import Path
@@ -246,7 +247,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('Offer published successfully',response.text)
         fields=self.account.session.post.call_args.kwargs['data']
         for key,expected in [('fields[summary][en]','English title'),('fields[summary][ru]','Русский заголовок'),
-                             ('fields[desc][en]','English description'),('fields[desc][ru]','Русское описание')]:
+                             ('fields[desc][en]',imported_description('English description')),('fields[desc][ru]',imported_description('Русское описание','ru'))]:
             self.assertEqual(fields[key],expected)
         api,auto=delivery_mapping.read_configs()
         self.assertEqual(api['English title']['product_id'],'32038')
@@ -267,7 +268,7 @@ class WorkflowTests(unittest.TestCase):
         response=routes.render(Request({'type':'http','method':'GET','path':'/imports/'}),product=product.to_dict(),draft='legacy')
         soup=BeautifulSoup(response.body,'lxml')
         self.assertEqual(soup.select_one('input[name="title_ru"]')['value'],'Русский заголовок')
-        self.assertEqual(soup.select_one('textarea[name="description_ru"]').text,'Русское описание')
+        self.assertEqual(soup.select_one('textarea[name="description_ru"]').text,imported_description('Русское описание','ru'))
         self.assertEqual(soup.select_one('input[name="title"]')['value'],'')
 
     def test_imported_title_prefix_is_saved_in_payload_and_mapping(self):
@@ -315,7 +316,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(payload['price'], '0.65')
         self.assertEqual(payload['amount'], '10')
         self.assertEqual(payload['fields[summary][en]'], self.product.title)
-        self.assertEqual(payload['fields[desc][en]'], self.product.description)
+        self.assertEqual(payload['fields[desc][en]'], imported_description(self.product.description))
         self.assertEqual(payload['form_created_at'], '12345')
         self.assertEqual(payload['auto_delivery'], '')
         self.account.method.reset_mock()
@@ -486,7 +487,7 @@ class WorkflowTests(unittest.TestCase):
         response = self.publish(self.preview(), description=submitted)
         self.assertIn('Offer published successfully', response.text)
         payload = self.account.session.post.call_args.kwargs['data']
-        self.assertEqual(payload['fields[desc][en]'], description)
+        self.assertEqual(payload['fields[desc][en]'], imported_description(description))
         self.assertNotIn('\r', payload['fields[desc][en]'])
 
     def test_imported_description_is_shortened_in_preview(self):
@@ -494,7 +495,9 @@ class WorkflowTests(unittest.TestCase):
         self.preview()
         response = self.client.post('/imports/preview', data={'csrf_token': 'csrf', 'product_url': URL})
         self.assertIn('maxlength="817"', response.text)
-        self.assertIn('x' * 817 + '</textarea>', response.text)
+        from bs4 import BeautifulSoup
+        text=BeautifulSoup(response.text,'lxml').select_one('textarea[name="description"]').text
+        self.assertEqual(text,imported_description('x'*817))
         self.assertNotIn('x' * 818, response.text)
         self.assertIn('shortened to 817', response.text)
 

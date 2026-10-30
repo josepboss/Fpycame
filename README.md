@@ -445,3 +445,27 @@ suppressed after the first notification; temporary lookup, rate-limit and monito
 errors repeat at most hourly. Pending alerts survive restarts. Configure Cardinal
 Telegram notification chats to receive them; failed Telegram deliveries still
 appear in Cardinal's existing Telegram logs.
+
+### Conversation holds and confirmation backups
+
+Before submitting a confirmation request, the monitor checks the order's review
+and chat history from its purchase notification up to the next purchase in that
+chat. Later messages explicitly naming the order are also considered. Reopened
+orders, staff involvement, reviews below five stars, buyer complaints, and
+ambiguous buyer replies are held for manual handling. Simple acknowledgments
+such as “thanks” or “OK” are allowed. This is a conservative text check, not an
+understanding of every conversation or language. Holds remain until handled
+manually; a later seller reply does not automatically erase a complaint.
+If history cannot be verified, the order is excluded and checking can retry.
+Only reason codes and order IDs are retained; no buyer conversation or purchased
+credentials are copied into these reports.
+
+Use `/confirmation_list` in an authorized Telegram notification chat for a fresh,
+copyable eligible-order list, with held/uncertain orders shown separately.
+Automatic backups are also sent when Discord sending is disabled/unconfigured
+or orders need review. Unchanged reports are suppressed for 24 hours. Keep the
+Cardinal reminder plugin enabled for automatic backups. The list covers tracked
+successful deliveries at least 24 hours old, not inferred historical/manual
+fulfillment. Generating or copying a list does not mark it submitted: check
+Discord before manually posting, and leave automatic sending disabled for orders
+you are handling manually to avoid posting the same request twice.

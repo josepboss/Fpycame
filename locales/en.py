@@ -886,3 +886,35 @@ dc_alert_send = 'Discord message failed or its outcome is uncertain. Check the c
 dc_alert_review = 'A Discord send needs manual review. Check the channel; automatic resending is blocked.'
 
 dc_alert_monitor = 'The Discord reminder monitor encountered an error. Check Cardinal logs.'
+
+oi_replacement_policy = 'Replacement Policy\nVerification must be completed within 1 hour of purchase.\nWe will only accept complaints if a complete screen recording clearly shows the following:\nImportant Note: Screen recordings must be completed within 1 hour of purchase.\nand shows Purchase Process , Login Process , Account Check'
+
+dc_backup_title = '📋 Confirmation request backup'
+
+dc_backup_note = 'Only tracked successful deliveries older than 24 hours are checked. Copy only the eligible list; held/uncertain orders require manual review. This report does not send Discord messages or mark orders as submitted.'
+
+dc_backup_ready = 'Ready to copy:'
+
+dc_backup_empty = 'No eligible orders.'
+
+dc_backup_held = 'Held — do not submit automatically:'
+
+dc_hold_review_rating = 'Review below five stars'
+
+dc_hold_reopened = 'Order reopened'
+
+dc_hold_support = 'Support/staff intervention'
+
+dc_hold_buyer_problem = 'Buyer reported a problem'
+
+dc_hold_buyer_review = 'Buyer message needs review'
+
+dc_hold_history_unavailable = 'Conversation could not be verified'
+
+dc_hold_send_review = 'Send failed/uncertain — check Discord first'
+
+dc_hold_unchecked = 'Status/check pending; excluded from eligible list'
+
+dc_backup_failed = 'Could not prepare the confirmation list. Check Cardinal logs.'
+
+dc_backup_command = 'Copyable confirmation-request list'

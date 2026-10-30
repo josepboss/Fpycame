@@ -28,10 +28,21 @@ class MetadataTests(unittest.TestCase):
         delivery.save_delivery_mapping('Old title','hstore','1358',True,imported=True)
         self.current=Product(1358,'https://hstora.com/en/product/1358-new-title','New title','description','0.60',10)
         p=patch.object(stock,'fetch_product',return_value=self.current);p.start();self.addCleanup(p.stop)
-        self.fields=SimpleNamespace(lot_id=42,fields={'node_id':'1259'},title_en='Old title',title_ru='Old title',price=0.65,active=False)
+        self.fields=SimpleNamespace(lot_id=42,fields={'node_id':'1259'},title_en='Old title',title_ru='Old title',price=0.65,active=False,description_en='Details',description_ru='Описание')
         self.account=Mock(id=123)
         self.account.get_lot_fields.return_value=self.fields
         self.account.get_my_subcategory_lots.return_value=[]
+
+    def test_existing_description_gains_policy_once_without_title_change(self):
+        from admin.services.offer_descriptions import imported_description
+        self.current.title='Old title'
+        self.current.price='0.50'
+        stock.sync_metadata(self.account)
+        self.assertEqual(self.fields.description_en,imported_description('Details'))
+        self.assertEqual(self.fields.description_ru,imported_description('Описание','ru'))
+        self.account.save_lot.assert_called_once()
+        stock.sync_metadata(self.account)
+        self.account.save_lot.assert_called_once()
 
     def test_rename_and_price_update_preserve_delivery(self):
         _,before=delivery.read_configs()
@@ -174,7 +185,7 @@ class MetadataTests(unittest.TestCase):
         stock.save_mapping(123,1259,self.original.to_dict(),'Custom title',42,markup='30')
         self.current.title='Old title';self.current.price='0.50'
         stock.sync_metadata(self.account)
-        self.account.save_lot.assert_not_called()
+        self.account.save_lot.assert_called_once()  # Description policy migration only.
         self.assertEqual(stock.mappings(123)[0]['title'],'Custom title')
 
 

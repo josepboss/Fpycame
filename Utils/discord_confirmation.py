@@ -66,6 +66,10 @@ def database() -> Iterator[sqlite3.Connection]:
                 account INTEGER, key TEXT, code TEXT, orders TEXT, detail TEXT,
                 pending INTEGER DEFAULT 1, notified REAL DEFAULT 0,
                 PRIMARY KEY(account,key))''')
+            columns={r[1] for r in db.execute('PRAGMA table_info(reminders)')}
+            if 'hold_reason' not in columns:
+                db.execute("ALTER TABLE reminders ADD COLUMN hold_reason TEXT NOT NULL DEFAULT ''")
+            db.execute('CREATE TABLE IF NOT EXISTS backups (account INTEGER PRIMARY KEY, digest TEXT, notified REAL)')
             yield db
     finally:
         db.close()
@@ -100,14 +104,9 @@ def queue_alert(account: int, code: str, orders: list[str], detail: str = '', re
                        (detail,account,key,time.time()-3600))
 
 
-def check_reminders(account: Any) -> None:
-    cfg = settings()
-    if not cfg['enabled'] or not cfg['token'] or not re.fullmatch(r'[0-9]{15,22}',cfg['channel_id']):
-        return
+def eligible_orders(account: Any) -> list[str]:
+    from Utils.confirmation_review import assess
     with database() as db:
-        gate=db.execute('SELECT next_send FROM dispatch WHERE channel_id=?',(cfg['channel_id'],)).fetchone()
-        if gate and gate['next_send']>time.time():
-            return
         rows=db.execute("SELECT * FROM reminders WHERE account=? AND state='waiting' AND delivered<=? AND retry_at<=? ORDER BY delivered LIMIT 75",
                         (account.id,time.time()-86400,time.time())).fetchall()
     eligible=[]
@@ -124,7 +123,37 @@ def check_reminders(account: Any) -> None:
         if order.status.name != 'PAID':
             update(account.id,order_id,'closed')
         else:
-            eligible.append(order_id)
+            try:
+                reason=assess(account,order)
+            except Exception as exc:
+                logger.warning('Confirmation conversation check deferred (%s).',type(exc).__name__)
+                reason='history_unavailable'
+            with database() as db:
+                db.execute("UPDATE reminders SET hold_reason=? WHERE account=? AND order_id=? AND state='waiting'",(reason,account.id,order_id))
+                if reason and reason!='history_unavailable':
+                    db.execute("UPDATE reminders SET state='held' WHERE account=? AND order_id=? AND state='waiting'",(account.id,order_id))
+            if not reason:
+                eligible.append(order_id)
+    return eligible
+
+
+def backup_orders(account: Any) -> dict:
+    ready=eligible_orders(account)
+    with database() as db:
+        rows=db.execute("SELECT order_id,state,hold_reason FROM reminders WHERE account=? AND delivered<=? AND state IN ('held','review','sending','waiting') ORDER BY delivered",
+                        (account.id,time.time()-86400)).fetchall()
+    return dict(ready=ready,held=[dict(r) for r in rows if r['order_id'] not in ready])
+
+
+def check_reminders(account: Any) -> None:
+    cfg = settings()
+    if not cfg['enabled'] or not cfg['token'] or not re.fullmatch(r'[0-9]{15,22}',cfg['channel_id']):
+        return
+    with database() as db:
+        gate=db.execute('SELECT next_send FROM dispatch WHERE channel_id=?',(cfg['channel_id'],)).fetchone()
+        if gate and gate['next_send']>time.time():
+            return
+    eligible=eligible_orders(account)
     if not eligible:
         return
     cfg=settings()
@@ -138,7 +167,7 @@ def check_reminders(account: Any) -> None:
         if gate and gate['next_send']>time.time():
             return
         for order_id in eligible:
-            changed=db.execute("UPDATE reminders SET state='sending',channel_id=? WHERE account=? AND order_id=? AND state='waiting' AND retry_at<=?",
+            changed=db.execute("UPDATE reminders SET state='sending',channel_id=? WHERE account=? AND order_id=? AND state='waiting' AND hold_reason='' AND retry_at<=?",
                                (cfg['channel_id'],account.id,order_id,time.time())).rowcount
             if changed:
                 claimed.append(order_id)
