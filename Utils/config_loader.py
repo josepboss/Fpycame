@@ -51,7 +51,8 @@ def create_config_obj(config_path: str) -> ConfigParser:
 
     :return: объект конфига.
     """
-    config = ConfigParser(delimiters=(":",), interpolation=None)
+    # Admin config saves use "="; older Cardinal configs use ":".
+    config = ConfigParser(delimiters=(":", "="), interpolation=None)
     config.optionxform = str
     config.read_file(codecs.open(config_path, "r", "utf8"))
     return config
@@ -146,6 +147,18 @@ def load_main_config(config_path: str):
             "language": ["ru", "en", "uk"]
         }
     }
+
+    # ConfigParser-based admin saves lowercase option names. Restore the
+    # canonical spellings in memory before validation and legacy migrations.
+    for section_name, parameters in values.items():
+        if section_name not in config:
+            continue
+        actual = {name.casefold(): name for name in config[section_name]}
+        for name in parameters:
+            previous = actual.get(name.casefold())
+            if name not in config[section_name] and previous is not None:
+                config.set(section_name, name, config[section_name][previous])
+                config.remove_option(section_name, previous)
 
     for section_name in values:
         if section_name not in config.sections():

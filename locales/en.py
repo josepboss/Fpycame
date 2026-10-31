@@ -918,3 +918,5 @@ dc_hold_unchecked = 'Status/check pending; excluded from eligible list'
 dc_backup_failed = 'Could not prepare the confirmation list. Check Cardinal logs.'
 
 dc_backup_command = 'Copyable confirmation-request list'
+
+custom_updates_disabled = 'Upstream updates are disabled for this custom version. Update only from your custom GitHub repository after reviewing the changes. No files were changed.'

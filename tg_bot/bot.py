@@ -75,8 +75,6 @@ class TGBot:
             "menu": "cmd_menu",
             "profile": "cmd_profile",
             "restart": "cmd_restart",
-            "check_updates": "cmd_check_updates",
-            "update": "cmd_update",
             "golden_key": "cmd_golden_key",
             "ban": "cmd_ban",
             "unban": "cmd_unban",
@@ -556,21 +554,8 @@ class TGBot:
         """
         self.bot.send_message(m.chat.id, _("about", self.cardinal.VERSION))
 
-    def check_updates(self, m: Message):
-        curr_tag = f"v{self.cardinal.VERSION}"
-        releases = updater.get_new_releases(curr_tag)
-        if isinstance(releases, int):
-            errors = {
-                1: ["update_no_tags", ()],
-                2: ["update_lasted", (curr_tag,)],
-                3: ["update_get_error", ()],
-            }
-            self.bot.send_message(m.chat.id, _(errors[releases][0], *errors[releases][1]))
-            return
-        for release in releases:
-            self.bot.send_message(m.chat.id, _("update_available", release.name, release.description))
-            time.sleep(1)
-        self.bot.send_message(m.chat.id, _("update_update"))
+    def check_updates(self, m: Message) -> None:
+        self.bot.send_message(m.chat.id, _("custom_updates_disabled"))
 
     def get_backup(self, m: Message):
         logger.info(
@@ -597,35 +582,8 @@ class TGBot:
         self.get_backup(m)
         return True
 
-    def update(self, m: Message):
-        curr_tag = f"v{self.cardinal.VERSION}"
-        releases = updater.get_new_releases(curr_tag)
-        if isinstance(releases, int):
-            errors = {
-                1: ["update_no_tags", ()],
-                2: ["update_lasted", (curr_tag,)],
-                3: ["update_get_error", ()],
-            }
-            self.bot.send_message(m.chat.id, _(errors[releases][0], *errors[releases][1]))
-            return
-
-        if not self.create_backup(m):
-            return
-        release = releases[-1]
-        if updater.download_zip(release.sources_link) \
-                or (release_folder := updater.extract_update_archive()) == 1:
-            self.bot.send_message(m.chat.id, _("update_download_error"))
-            return
-        self.bot.send_message(m.chat.id, _("update_downloaded").format(release.name, str(len(releases) - 1)))
-
-        if updater.install_release(release_folder):
-            self.bot.send_message(m.chat.id, _("update_install_error"))
-            return
-
-        if getattr(sys, 'frozen', False):
-            self.bot.send_message(m.chat.id, _("update_done_exe"))
-        else:
-            self.bot.send_message(m.chat.id, _("update_done"))
+    def update(self, m: Message) -> None:
+        self.bot.send_message(m.chat.id, _("custom_updates_disabled"))
 
     def send_system_info(self, m: Message):
         """

@@ -247,49 +247,9 @@ def extract_backup_archive() -> bool:
 
 
 def install_release(folder_name: str) -> int:
-    """
-    Устанавливает обновление.
-
-    :param folder_name: название папки со скачанным обновлением в storage/cache/update
-    :return: 0, если обновление установлено.
-        1 - произошла непредвиденная ошибка.
-        2 - папка с обновлением отсутствует.
-    """
-    try:
-        release_folder = os.path.join("storage/cache/update", folder_name)
-        if not os.path.exists(release_folder):
-            return 2
-
-        if os.path.exists(os.path.join(release_folder, "delete.json")):
-            with open(os.path.join(release_folder, "delete.json"), "r", encoding="utf-8") as f:
-                data = json.loads(f.read())
-                for i in data:
-                    if not os.path.exists(i):
-                        continue
-                    if os.path.isfile(i):
-                        os.remove(i)
-                    else:
-                        shutil.rmtree(i, ignore_errors=True)
-
-        for i in os.listdir(release_folder):
-            if i == "delete.json":
-                continue
-
-            source = os.path.join(release_folder, i)
-            if source.endswith(".exe"):
-                if not os.path.exists("update"):
-                    os.mkdir("update")
-                shutil.copy2(source, os.path.join("update", i))
-                continue
-
-            if os.path.isfile(source):
-                shutil.copy2(source, i)
-            else:
-                shutil.copytree(source, os.path.join(".", i), dirs_exist_ok=True)
-        return 0
-    except:
-        logger.debug("TRACEBACK", exc_info=True)
-        return 1
+    """Block stock upstream releases: this installation is a customized fork."""
+    logger.warning("Upstream release installation blocked for this custom fork.")
+    return 1
 
 
 def install_backup() -> bool:
