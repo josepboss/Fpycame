@@ -216,17 +216,7 @@ bot_started = """✅ Telegram bot is running!\n
 🔃 As soon as <i>FunPay Cardinal</i> is initialized, this message will change.\n
 📋 If <i>FPC</i> does not initialize for a long time, check the logs with /logs"""
 
-fpc_init = """✅ <b><u>FunPay Cardinal initialized!</u></b>\n
-ℹ️ <b><i>Version:</i></b> <code>{}</code>
-👑 <b><i>Account:</i></b>  <code>{}</code> | <code>{}</code>
-💰 <b><i>Balance:</i></b> <code>{}₽, {}$, {}€</code>
-📊 <b><i>Active orders:</i></b>  <code>{}</code>
-
-💬 <b><i>Telegram chat:</i></b> @funpay_cardinal
-🔄 <b><i>Updates:</i></b> @fpc_updates
-🧩 <b><i>Plugins:</i></b> @fpc_plugins
-👨‍💻 <b><i>Developer:</i></b> @woopertail, @sidor0912
-🤑 <b><i>Donate:</i></b> @sidor_donate"""
+fpc_init = '✅ <b>Custom FunPay Cardinal initialized!</b>\nVersion: <code>{}</code>\nAccount: <code>{}</code> | <code>{}</code>\nBalance: <code>{}₽, {}$, {}€</code>\nActive orders: <code>{}</code>'
 
 create_test_ad_key = "Enter the name of the lot whose auto-delivery you want to test."
 
@@ -234,12 +224,7 @@ test_ad_key_created = """✅ A one-time key for <code>{}</code> delivery has bee
 Send the command from below to chat with the user to whom you want to deliver the item.\n
 <code>!автовыдача {}</code>"""
 
-about = """<b>🐦 FunPay Cardinal 🐦 v{}</b>\n
-<i>Telegram chat:</i> @funpay_cardinal
-<i>Updates:</i> @fpc_updates
-<i>Plugins:</i> @fpc_plugins
-<i>Developer:</i> @woopertail, @sidor0912
-<i>Donate:</i> @sidor_donate"""
+about = '<b>Custom FunPay Cardinal v{}</b>'
 
 sys_info = """<b><u>Data summary</u></b>
 
@@ -421,28 +406,11 @@ pl_not_found_err = "❌ Plugin with UUID <code>{}</code> not found."
 pl_file_not_found_err = "❌  File <code>{}</code> not found.\nRestart <i>FPC</i> with command /restart."
 pl_commands_list = "<b><i>{}</i></b> plugin commands list."
 pl_author = "Dev"
-pl_new = "Send me a plugin.\n\n<b>⚠️ ATTENTION! Downloading plugins from questionable sources may lead to unfortunate consequences.\n" \
-         "@fpc_plugins solves most potential issues.</b>"
+pl_new = 'Send a plugin file. Only install code you trust; plugins can access your account and credentials.'
 
 au_user_settings = "Settings for user {}"
 adv_fpc = "😎 FunPay Cardinal - the best bot for FunPay"
-adv_description = """🐦 FunPay Cardinal v{}🐦
-
-🤖 Automatic product delivery
-🚀 Auto-raise of lots
-💬 Auto-reply to prepared commands
-🔄 Auto-recovery of lots after sale
-📦 Auto-deactivation of lots if products are out of stock
-🔝 Permanent online presence
-📲 Notifications in Telegram
-🕹️ Full control panel in Telegram
-🧩 Plugins
-🌟 And much more...
-
-🛠️ Create your own bot: github.com/sidor0912/FunPayCardinal
-🔄 Updates: @fpc_updates
-🧩 Plugins: @fpc_plugins
-💬 Chat: @funpay_cardinal"""
+adv_description = 'Private FunPay sales assistant v{}.'
 
 # - Menus desc
 desc_main = "Select a settings category."
@@ -920,3 +888,9 @@ dc_backup_failed = 'Could not prepare the confirmation list. Check Cardinal logs
 dc_backup_command = 'Copyable confirmation-request list'
 
 custom_updates_disabled = 'Upstream updates are disabled for this custom version. Update only from your custom GitHub repository after reviewing the changes. No files were changed.'
+
+private_bot_short_description = 'Private FunPay sales assistant'
+
+private_bot_description = 'Private control panel for your FunPay account and automatic deliveries.'
+
+private_announcements_disabled = 'Upstream advertising and remote announcements are disabled in this custom version.'

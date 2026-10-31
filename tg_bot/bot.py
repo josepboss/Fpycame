@@ -94,8 +94,8 @@ class TGBot:
             "watermark": "cmd_watermark",
         }
         self.__default_notification_settings = {
-            utils.NotificationTypes.ad: 1,
-            utils.NotificationTypes.announcement: 1
+            utils.NotificationTypes.ad: 0,
+            utils.NotificationTypes.announcement: 0
         }
 
     # User states
@@ -271,6 +271,8 @@ class TGBot:
         """
         Устанавливает настройки уведомлений по умолчанию в новом чате.
         """
+        if m.from_user is None or m.from_user.id not in self.authorized_users:
+            return
         if str(m.chat.id) in self.notification_settings and m.from_user.id in self.authorized_users and \
                 self.is_notification_enabled(m.chat.id, NotificationTypes.critical):
             return
@@ -307,7 +309,7 @@ class TGBot:
         else:
             self.attempts[m.from_user.id] = self.attempts.get(m.from_user.id, 0) + 1
             text = _("access_denied", m.from_user.username, language=lang)
-            kb_links = kb.links(language=lang)
+            kb_links = None
             logger.warning(_("log_access_attempt", m.from_user.username, m.from_user.id))
         self.bot.send_message(m.chat.id, text, reply_markup=kb_links)
 
@@ -1005,7 +1007,7 @@ class TGBot:
         """
         Отправляет сообщение с клавиатурой управления уведомлениями о новых объявлениях.
         """
-        self.bot.send_message(m.chat.id, _("desc_an"), reply_markup=kb.announcements_settings(self.cardinal, m.chat.id))
+        self.bot.send_message(m.chat.id, _("private_announcements_disabled"))
 
     def send_review_reply_text(self, c: CallbackQuery):
         stars = int(c.data.split(":")[1])
@@ -1026,23 +1028,14 @@ class TGBot:
         self.bot.send_message(c.message.chat.id, _("old_mode_help"))
 
     def empty_callback(self, c: CallbackQuery):
-        self.bot.answer_callback_query(c.id, "🤑 @sidor_donate 🤑")
+        self.bot.answer_callback_query(c.id)
 
     def switch_lang(self, c: CallbackQuery):
         lang = c.data.split(":")[1]
         Localizer(lang)
         self.cardinal.MAIN_CFG["Other"]["language"] = lang
         self.cardinal.save_config(self.cardinal.MAIN_CFG, "configs/_main.cfg")
-        if localizer.current_language == "en":
-            self.bot.answer_callback_query(c.id, "The translation may be incomplete and contain errors.\n\n"
-                                                 "If you find errors in the translation, let @sidor0912 know.\n\n"
-                                                 "Thank you :)", show_alert=True)
-        elif localizer.current_language == "uk":
-            self.bot.answer_callback_query(c.id, "Переклад складено за допомогою ChatGPT.\n"
-                                                 "Повідомте @sidor0912, якщо знайдете помилки.", show_alert=True)
-        elif localizer.current_language == "ru":
-            self.bot.answer_callback_query(c.id, '«А я сейчас вам покажу, откуда на Беларусь готовилось нападение»',
-                                           show_alert=True)
+        self.bot.answer_callback_query(c.id)
         c.data = f"{CBT.CATEGORY}:lang"
         self.open_settings_section(c)
 
@@ -1140,6 +1133,9 @@ class TGBot:
             kwargs["reply_markup"] = keyboard
         to_delete = []
         for chat_id in self.notification_settings:
+            # Do not deliver private alerts to users who have lost access.
+            if str(chat_id).isdigit() and int(chat_id) not in self.authorized_users:
+                continue
             if notification_type != utils.NotificationTypes.important_announcement and \
                     not self.is_notification_enabled(chat_id, notification_type):
                 continue
@@ -1192,29 +1188,10 @@ class TGBot:
         Изменяет описания и название бота.
         """
 
-        name = self.bot.get_me().full_name
-        limit = 64
-        add_to_name = ["FunPay Bot | Бот ФанПей", "FunPay Bot", "FunPayBot", "FunPay"]
-        new_name = name
-        if "vertex" in new_name.lower():
-            new_name = ""
-        new_name = new_name.split("ㅤ")[0].strip()
-        if "funpay" not in new_name.lower():
-            for m_name in add_to_name:
-                if len(new_name) + 2 + len(m_name) <= limit:
-                    new_name = f"{(new_name + ' ').ljust(limit - len(m_name) - 1, 'ㅤ')} {m_name}"
-                    break
-            if new_name != name:
-                self.bot.set_my_name(new_name)
-        sh_text = "🛠️ github.com/sidor0912/FunPayCardinal 💰 @sidor_donate 👨‍💻 @sidor0912 🧩 @fpc_plugins 🔄 @fpc_updates 💬 @funpay_cardinal"
-        res = self.bot.get_my_short_description().short_description
-        if res != sh_text:
-            self.bot.set_my_short_description(sh_text)
-        for i in [None, *localizer.languages.keys()]:
-            res = self.bot.get_my_description(i).description
-            text = _("adv_description", self.cardinal.VERSION, language=i)
-            if res != text:
-                self.bot.set_my_description(text, language_code=i)
+        # Keep the owner's chosen name and use neutral descriptions only.
+        self.bot.set_my_short_description(_("private_bot_short_description"))
+        for language in (None, *localizer.languages.keys()):
+            self.bot.set_my_description(_("private_bot_description", language=language), language_code=language)
 
     def init(self):
         self.__register_handlers()

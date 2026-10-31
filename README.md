@@ -469,3 +469,18 @@ successful deliveries at least 24 hours old, not inferred historical/manual
 fulfillment. Generating or copying a list does not mark it submitted: check
 Discord before manually posting, and leave automatic sending disabled for orders
 you are handling manually to avoid posting the same request twice.
+
+### Private-fork safeguards
+
+Upstream advertising/news polling and promotional Telegram profile rewriting are
+removed. The bot uses neutral descriptions and keeps the owner's chosen name.
+Only authorized Telegram users can register notification chats; revoked private
+users are excluded even from important alerts. On the deployed VPS, password-based
+new Telegram enrollment is blocked after preserving the existing administrator.
+A fresh installation still needs its initial administrator registration.
+
+FunPay HTTP exception strings omit query parameters, request headers/bodies and
+response contents. Old log files are not retroactively scrubbed; restrict their
+filesystem permissions and never share raw logs or configuration backups.
+Upstream `/update` installation remains blocked; use the custom repository for
+reviewed updates. Source attribution remains separate from promotional features.
